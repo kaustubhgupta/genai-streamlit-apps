@@ -30,5 +30,5 @@ for pattern, chunker in (
             embeddings,
             chunked_data["chunks"],
             chunked_data["metadata"],
-            strategy=strategy
+            strategy=strategy,
         )
