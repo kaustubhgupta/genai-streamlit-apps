@@ -7,25 +7,18 @@ from utility.utilities.embedding_chunking_utilities import (
 )
 from utility.utilities.vectordb_utilities import ingest_embeddings
 
-pdfs_folder = Path("notes")
-texts_folder = Path("session_summaries")
+materials_folder = Path("bootcamp_material")
 
-for document in sorted(pdfs_folder.glob("*.pdf")):
-    chunked_data = generate_fixed_pdf_chunks(str(document))
-    embeddings = generate_batch_sentences_embeddings(chunked_data["chunks"])
-    ingest_embeddings(
-        chunked_data["ids"],
-        embeddings,
-        chunked_data["chunks"],
-        chunked_data["metadata"],
-    )
-
-for document in sorted(texts_folder.glob("*.txt")):
-    chunked_data = generate_fixed_text_chunks(str(document))
-    embeddings = generate_batch_sentences_embeddings(chunked_data["chunks"])
-    ingest_embeddings(
-        chunked_data["ids"],
-        embeddings,
-        chunked_data["chunks"],
-        chunked_data["metadata"],
-    )
+for pattern, chunker in (
+    ("*.pdf", generate_fixed_pdf_chunks),
+    ("*.txt", generate_fixed_text_chunks),
+):
+    for document in sorted(materials_folder.glob(pattern)):
+        chunked_data = chunker(str(document))
+        embeddings = generate_batch_sentences_embeddings(chunked_data["chunks"])
+        ingest_embeddings(
+            chunked_data["ids"],
+            embeddings,
+            chunked_data["chunks"],
+            chunked_data["metadata"],
+        )

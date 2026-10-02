@@ -50,7 +50,7 @@ if (
 with st.sidebar:
 
     st.subheader("Available PDFs")
-    notes_dir = Path(__file__).resolve().parent.parent / "notes"
+    notes_dir = Path(__file__).resolve().parent.parent / "bootcamp_material"
     pdf_names = sorted(path.name for path in notes_dir.glob("*.pdf"))
     if pdf_names:
         for pdf_name in pdf_names:
