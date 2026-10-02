@@ -128,8 +128,10 @@ user_input = st.chat_input("Ask a question or follow up...")
 
 
 if user_input:
-    user_input_embeddings = generate_single_sentence_embeddings(user_input)
-    pdfs_chunks = fetch_similar_results(user_input_embeddings)
+    user_input_embeddings = generate_single_sentence_embeddings(
+        user_input,
+    )
+    pdfs_chunks = fetch_similar_results(user_input_embeddings, n_results=3)
     prompt = f"User Question: {user_input}\n\nRelevant PDF Chunks:\n"
     for i, chunk in enumerate(pdfs_chunks["documents"][0]):
         prompt += f"Chunk {i + 1}: {chunk}\n"

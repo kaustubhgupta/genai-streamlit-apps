@@ -30,7 +30,7 @@ def generate_batch_sentences_embeddings(sentences, dimensions=num_dims):
     return embeddings
 
 
-def generate_fixed_chunks(
+def generate_fixed_pdf_chunks(
     file_path,
     chunk_size=chunk_size,
     chunk_overlap_size=chunk_overlap_size,
@@ -49,6 +49,38 @@ def generate_fixed_chunks(
     while start < len(pdf_text):
         end = start + chunk_size
         chunk = pdf_text[start:end]
+        id = f"{file_path}_{str(start)}"
+        if enable_metadata:
+            metadata.append(
+                {
+                    "doc_name": file_path,
+                    "chunk_size": chunk_size,
+                    "chunk_overlap_size": chunk_overlap_size,
+                }
+            )
+        chunks.append(chunk)
+        ids.append(id)
+        start = end - chunk_overlap_size
+
+    return {"chunks": chunks, "ids": ids, "metadata": metadata}
+
+
+def generate_fixed_text_chunks(
+    file_path,
+    chunk_size=chunk_size,
+    chunk_overlap_size=chunk_overlap_size,
+    enable_metadata=True,
+):
+    with open(file_path, "r") as f:
+        text_file_text = f.read()
+
+    chunks = []
+    start = 0
+    ids = []
+    metadata = []
+    while start < len(text_file_text):
+        end = start + chunk_size
+        chunk = text_file_text[start:end]
         id = f"{file_path}_{str(start)}"
         if enable_metadata:
             metadata.append(
