@@ -68,7 +68,10 @@ CALENDAR_TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "date_value": {"type": "string", "description": "Date in YYYY-MM-DD format."}
+                    "date_value": {
+                        "type": "string",
+                        "description": "Date in YYYY-MM-DD format.",
+                    }
                 },
                 "required": ["date_value"],
             },
@@ -82,8 +85,14 @@ CALENDAR_TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "date_value": {"type": "string", "description": "Date in YYYY-MM-DD format."},
-                    "days": {"type": "integer", "description": "Number of days to add; negative values subtract."},
+                    "date_value": {
+                        "type": "string",
+                        "description": "Date in YYYY-MM-DD format.",
+                    },
+                    "days": {
+                        "type": "integer",
+                        "description": "Number of days to add; negative values subtract.",
+                    },
                 },
                 "required": ["date_value", "days"],
             },
@@ -97,8 +106,14 @@ CALENDAR_TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "start_date": {"type": "string", "description": "Start date in YYYY-MM-DD format."},
-                    "end_date": {"type": "string", "description": "End date in YYYY-MM-DD format."},
+                    "start_date": {
+                        "type": "string",
+                        "description": "Start date in YYYY-MM-DD format.",
+                    },
+                    "end_date": {
+                        "type": "string",
+                        "description": "End date in YYYY-MM-DD format.",
+                    },
                 },
                 "required": ["start_date", "end_date"],
             },

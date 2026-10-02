@@ -5,3 +5,4 @@ python-dotenv==1.2.3
 streamlit==1.64.0
 pypdf
 chromadb
+scikit-learn

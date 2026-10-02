@@ -14,6 +14,7 @@ st.set_page_config(
 )
 st.title("Database Assistant")
 
+
 def normalize_response_tool(tool):
     """Convert Chat Completions-style tools to Responses API format."""
     tool = dict(tool)
@@ -23,9 +24,7 @@ def normalize_response_tool(tool):
     return tool
 
 
-ALL_TOOLS = [
-    normalize_response_tool(tool) for tool in PG_TOOLS + CALENDAR_TOOLS
-]
+ALL_TOOLS = [normalize_response_tool(tool) for tool in PG_TOOLS + CALENDAR_TOOLS]
 ALL_TOOLS_MAPPINGS = {**PG_TOOLS_MAPPING, **CALENDAR_TOOLS_MAPPING}
 
 if "database_chat_messages" not in st.session_state:
@@ -51,7 +50,10 @@ history_selection = st.session_state.get("database_history_selection")
 if (
     history_selection is not None
     and history_selection != st.session_state.get("selected_chat_id")
-    and any(item["id"] == history_selection for item in st.session_state.database_chat_history)
+    and any(
+        item["id"] == history_selection
+        for item in st.session_state.database_chat_history
+    )
 ):
     restore_chat(history_selection)
 
@@ -96,7 +98,11 @@ def save_chat_history(question, response_id):
     """Create a history entry for a new chat or update the active chat."""
     chat_id = st.session_state.get("database_selected_chat_id")
     history_item = next(
-        (item for item in st.session_state.database_chat_history if item["id"] == chat_id),
+        (
+            item
+            for item in st.session_state.database_chat_history
+            if item["id"] == chat_id
+        ),
         None,
     )
 
@@ -146,15 +152,14 @@ if user_input:
                     if item.type == "function_call":
                         args = json.loads(item.arguments)
                         function_name = item.name
-                        print(function_name, args)
                         call_function = ALL_TOOLS_MAPPINGS[function_name]
-                        st.info(f'Calling {function_name} with following arguments: {args}')
+                        st.info(f"Using tool: {function_name}")
                         tool_result = call_function(**args)
-                        call_id = item.call_id
+                        tool_call_id = item.call_id
                         tool_outputs.append(
                             {
                                 "type": "function_call_output",
-                                "call_id": call_id,
+                                "call_id": tool_call_id,
                                 "output": str(tool_result),
                             }
                         )
@@ -170,12 +175,12 @@ if user_input:
                 )
                 response_id = response.id
 
-            query = response.output_text.strip()
+            output = response.output_text.strip()
 
             st.session_state.database_chat_messages.extend(
                 [
                     {"role": "user", "content": user_input},
-                    {"role": "assistant", "content": query},
+                    {"role": "assistant", "content": output},
                 ]
             )
             save_chat_history(user_input, response_id)

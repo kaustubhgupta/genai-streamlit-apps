@@ -107,7 +107,7 @@ if st.button("Ask") and user_input.strip() and selected_tables:
         f"Question: {user_input}\n"
         f"Use only these table schemas:\n{table_schemas}\n"
         "Do not reference tables from any other schema.\n"
-        "For a WITH query, set operation_type to SELECT.\n"  
+        "For a WITH query, set operation_type to SELECT.\n"
         "Return only the requested structured SQL query with no markdown and no explanation."
     )
     try:
