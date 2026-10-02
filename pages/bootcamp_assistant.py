@@ -131,9 +131,9 @@ if user_input:
     user_input_embeddings = generate_single_sentence_embeddings(
         user_input,
     )
-    pdfs_chunks = fetch_similar_results(user_input_embeddings, n_results=3)
+    relevant_chunks = fetch_similar_results(user_input_embeddings, n_results=5)
     prompt = f"User Question: {user_input}\n\nRelevant PDF Chunks:\n"
-    for i, chunk in enumerate(pdfs_chunks["documents"][0]):
+    for i, chunk in enumerate(relevant_chunks["documents"][0]):
         prompt += f"Chunk {i + 1}: {chunk}\n"
     prompt += "\nPlease provide a detailed answer based on the relevant PDF chunks. If the answer is not found in the provided chunks, please respond with 'I don't know.'"
     print(f"Prompt sent to OpenAI API:\n{prompt}\n")  # Debugging line
