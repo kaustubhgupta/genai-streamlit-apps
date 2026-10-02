@@ -32,6 +32,9 @@ def restore_chat(chat_id):
         dict(message) for message in history_item["messages"]
     ]
     st.session_state.last_response_id = history_item.get("response_id")
+    st.session_state.bootcamp_search_strategy = history_item.get(
+        "search_strategy", "recursive"
+    )
 
 
 # The radio widget updates its session-state value before the next script run.
@@ -50,6 +53,12 @@ if (
 with st.sidebar:
 
     st.subheader("Available PDFs")
+    search_strategy = st.selectbox(
+        "Search strategy",
+        options=["recursive", "fixed", "semantic"],
+        index=0,
+        key="bootcamp_search_strategy",
+    )
     notes_dir = Path(__file__).resolve().parent.parent / "bootcamp_material"
     pdf_names = sorted(path.name for path in notes_dir.glob("*.pdf"))
     if pdf_names:
@@ -93,7 +102,7 @@ for message in st.session_state.bootcamp_chat_messages:
             )
 
 
-def save_chat_history(question, response_id):
+def save_chat_history(question, response_id, search_strategy):
     """Create a history entry for a new chat or update the active chat."""
     chat_id = st.session_state.get("bootcamp_selected_chat_id")
     history_item = next(
@@ -113,6 +122,7 @@ def save_chat_history(question, response_id):
             "question": question,
             "messages": [],
             "response_id": response_id,
+            "search_strategy": search_strategy,
         }
         st.session_state.bootcamp_chat_history.append(history_item)
         st.session_state.bootcamp_selected_chat_id = chat_id
@@ -121,6 +131,7 @@ def save_chat_history(question, response_id):
         dict(message) for message in st.session_state.bootcamp_chat_messages
     ]
     history_item["response_id"] = response_id
+    history_item["search_strategy"] = search_strategy
     st.session_state.bootcamp_last_response_id = response_id
 
 
@@ -133,7 +144,9 @@ if user_input:
     )
     try:
         with st.spinner("Working on user request..."):
-            relevant_chunks = fetch_similar_results(user_input_embeddings, n_results=5)
+            relevant_chunks = fetch_similar_results(
+                user_input_embeddings, n_results=5, strategy=search_strategy
+            )
             prompt = f"User Question: {user_input}\n\nRelevant PDF Chunks:\n"
             for i, chunk in enumerate(relevant_chunks["documents"][0]):
                 prompt += f"Chunk {i + 1}: {chunk}\n"
@@ -156,7 +169,7 @@ if user_input:
                     {"role": "assistant", "content": output},
                 ]
             )
-            save_chat_history(user_input, response_id)
+            save_chat_history(user_input, response_id, search_strategy)
         st.rerun()
     except Exception as exc:
         st.error(f"Could not generate or run the query: {exc}")

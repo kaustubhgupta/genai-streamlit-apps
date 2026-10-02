@@ -1,6 +1,7 @@
 from openai import OpenAI
 from dotenv import load_dotenv
 from pypdf import PdfReader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 import os
 
 load_dotenv()
@@ -30,39 +31,96 @@ def generate_batch_sentences_embeddings(sentences, dimensions=num_dims):
     return embeddings
 
 
+def _read_text_file(file_path):
+    with open(file_path, "r") as f:
+        return f.read()
+
+
+def _read_pdf_file(file_path):
+    reader = PdfReader(file_path)
+    return " ".join(page.extract_text() or "" for page in reader.pages)
+
+
+def _generate_chunks(
+    text,
+    file_path,
+    chunk_size,
+    chunk_overlap_size,
+    enable_metadata,
+    strategy,
+):
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be greater than zero")
+    if chunk_overlap_size < 0 or chunk_overlap_size >= chunk_size:
+        raise ValueError("chunk_overlap_size must be between zero and chunk_size")
+
+    chunks = []
+    ids = []
+    metadata = []
+
+    if strategy == "fixed":
+        start = 0
+        while start < len(text):
+            end = start + chunk_size
+            chunks.append(text[start:end])
+            ids.append(f"{file_path}_{start}")
+            start = end - chunk_overlap_size
+    elif strategy == "recursive":
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=chunk_size, chunk_overlap=chunk_overlap_size
+        )
+        chunks = splitter.split_text(text)
+        ids = [f"{file_path}_{i}" for i in range(len(chunks))]
+    else:
+        raise ValueError("strategy must be 'fixed' or 'recursive'")
+
+    if enable_metadata:
+        metadata = [
+            {
+                "doc_name": file_path,
+                "chunk_size": chunk_size,
+                "chunk_overlap_size": chunk_overlap_size,
+            }
+            for _ in chunks
+        ]
+
+    return {"chunks": chunks, "ids": ids, "metadata": metadata}
+
+
+def generate_file_chunks(
+    file_path,
+    text_loader,
+    chunk_size=chunk_size,
+    chunk_overlap_size=chunk_overlap_size,
+    enable_metadata=True,
+    strategy="recursive",
+):
+    """Chunk a file after converting it to text with the supplied loader."""
+    text = text_loader(file_path)
+    return _generate_chunks(
+        text,
+        file_path,
+        chunk_size,
+        chunk_overlap_size,
+        enable_metadata,
+        strategy,
+    )
+
+
 def generate_fixed_pdf_chunks(
     file_path,
     chunk_size=chunk_size,
     chunk_overlap_size=chunk_overlap_size,
     enable_metadata=True,
 ):
-    reader = PdfReader(file_path)
-
-    pdf_text = ""
-    for page in reader.pages:
-        pdf_text = pdf_text + page.extract_text() + " "
-
-    chunks = []
-    start = 0
-    ids = []
-    metadata = []
-    while start < len(pdf_text):
-        end = start + chunk_size
-        chunk = pdf_text[start:end]
-        id = f"{file_path}_{str(start)}"
-        if enable_metadata:
-            metadata.append(
-                {
-                    "doc_name": file_path,
-                    "chunk_size": chunk_size,
-                    "chunk_overlap_size": chunk_overlap_size,
-                }
-            )
-        chunks.append(chunk)
-        ids.append(id)
-        start = end - chunk_overlap_size
-
-    return {"chunks": chunks, "ids": ids, "metadata": metadata}
+    return generate_file_chunks(
+        file_path,
+        _read_pdf_file,
+        chunk_size,
+        chunk_overlap_size,
+        enable_metadata,
+        strategy="fixed",
+    )
 
 
 def generate_fixed_text_chunks(
@@ -71,27 +129,43 @@ def generate_fixed_text_chunks(
     chunk_overlap_size=chunk_overlap_size,
     enable_metadata=True,
 ):
-    with open(file_path, "r") as f:
-        text_file_text = f.read()
+    return generate_file_chunks(
+        file_path,
+        _read_text_file,
+        chunk_size,
+        chunk_overlap_size,
+        enable_metadata,
+        strategy="fixed",
+    )
 
-    chunks = []
-    start = 0
-    ids = []
-    metadata = []
-    while start < len(text_file_text):
-        end = start + chunk_size
-        chunk = text_file_text[start:end]
-        id = f"{file_path}_{str(start)}"
-        if enable_metadata:
-            metadata.append(
-                {
-                    "doc_name": file_path,
-                    "chunk_size": chunk_size,
-                    "chunk_overlap_size": chunk_overlap_size,
-                }
-            )
-        chunks.append(chunk)
-        ids.append(id)
-        start = end - chunk_overlap_size
 
-    return {"chunks": chunks, "ids": ids, "metadata": metadata}
+def generate_recursive_text_chunks(
+    file_path,
+    chunk_size=chunk_size,
+    chunk_overlap_size=chunk_overlap_size,
+    enable_metadata=True,
+):
+    return generate_file_chunks(
+        file_path,
+        _read_text_file,
+        chunk_size,
+        chunk_overlap_size,
+        enable_metadata,
+        strategy="recursive",
+    )
+
+
+def generate_recursive_pdf_chunks(
+    file_path,
+    chunk_size=chunk_size,
+    chunk_overlap_size=chunk_overlap_size,
+    enable_metadata=True,
+):
+    return generate_file_chunks(
+        file_path,
+        _read_pdf_file,
+        chunk_size,
+        chunk_overlap_size,
+        enable_metadata,
+        strategy="recursive",
+    )

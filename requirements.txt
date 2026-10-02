@@ -6,3 +6,4 @@ streamlit==1.64.0
 pypdf
 chromadb
 scikit-learn
+langchain-text-splitters
