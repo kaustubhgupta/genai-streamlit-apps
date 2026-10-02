@@ -1,10 +1,10 @@
 from pathlib import Path
 
-from embedding_chunking_utilities import (
+from utility.utilities.embedding_chunking_utilities import (
     generate_batch_sentences_embeddings,
     generate_fixed_chunks,
 )
-from vectordb_utilities import ingest_embeddings
+from utility.utilities.vectordb_utilities import ingest_embeddings
 
 notes_folder = Path("notes")
 

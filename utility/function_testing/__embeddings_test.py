@@ -1,5 +1,7 @@
 from sklearn.metrics.pairwise import cosine_similarity, euclidean_distances
-from utility.embedding_chunking_utilities import generate_single_sentence_embeddings
+from utility.utilities.embedding_chunking_utilities import (
+    generate_single_sentence_embeddings,
+)
 
 sentences = [
     "dbt is a SQL transformation framework",

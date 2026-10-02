@@ -3,8 +3,8 @@ import os
 from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
-from utility.pg_tools import direct_db_access, fetch_schema, load_schema_tables
-from utility.generic_utilities import StrictSQLQuery
+from utility.tools.pg_tools import direct_db_access, fetch_schema, load_schema_tables
+from utility.utilities.generic_utilities import StrictSQLQuery
 
 load_dotenv()
 

@@ -4,8 +4,8 @@ import json
 from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
-from utility.pg_tools import PG_TOOLS, PG_TOOLS_MAPPING
-from utility.calendar_tools import CALENDAR_TOOLS, CALENDAR_TOOLS_MAPPING
+from utility.tools.pg_tools import PG_TOOLS, PG_TOOLS_MAPPING
+from utility.tools.calendar_tools import CALENDAR_TOOLS, CALENDAR_TOOLS_MAPPING
 
 load_dotenv()
 

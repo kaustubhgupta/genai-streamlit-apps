@@ -4,8 +4,10 @@ from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
-from utility.embedding_chunking_utilities import generate_single_sentence_embeddings
-from utility.vectordb_utilities import fetch_similar_results
+from utility.utilities.embedding_chunking_utilities import (
+    generate_single_sentence_embeddings,
+)
+from utility.utilities.vectordb_utilities import fetch_similar_results
 
 load_dotenv()
 
