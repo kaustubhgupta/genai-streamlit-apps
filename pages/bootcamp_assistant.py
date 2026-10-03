@@ -8,8 +8,12 @@ from utility.utilities.embedding_chunking_utilities import (
     generate_single_sentence_embeddings,
 )
 from utility.utilities.vectordb_utilities import fetch_similar_results
+from utility.utilities.chunk_reranker import rerank_docs
 
 load_dotenv()
+
+CHUNK_FILTER_THRESHOLD = int(os.environ.get("CHUNK_FILTER_THRESHOLD"))
+SIMILAR_CHUNK_THRESHOLD = int(os.environ.get("SIMILAR_CHUNK_THRESHOLD"))
 
 st.set_page_config(
     page_title="Bootcamp Assistant", page_icon=":bar_chart:", layout="wide"
@@ -52,7 +56,7 @@ if (
 
 with st.sidebar:
 
-    st.subheader("Available PDFs")
+    st.subheader("Available resources")
     search_strategy = st.selectbox(
         "Search strategy",
         options=["recursive", "fixed", "semantic"],
@@ -60,12 +64,20 @@ with st.sidebar:
         key="bootcamp_search_strategy",
     )
     notes_dir = Path(__file__).resolve().parent.parent / "bootcamp_material"
-    pdf_names = sorted(path.name for path in notes_dir.glob("*.pdf"))
-    if pdf_names:
-        for pdf_name in pdf_names:
-            st.write(f"• {pdf_name}")
+    resource_paths = sorted(
+        (
+            path.relative_to(notes_dir)
+            for path in notes_dir.rglob("*")
+            if path.is_file()
+        ),
+        key=lambda path: str(path).lower(),
+    )
+    if resource_paths:
+        with st.container(height=250, border=True):
+            for resource_path in resource_paths:
+                st.write(f"• {resource_path}")
     else:
-        st.caption("No PDFs found in the notes folder.")
+        st.caption("No resources found in the notes folder.")
 
     if st.button("New chat"):
         st.session_state.bootcamp_chat_messages = []
@@ -144,13 +156,35 @@ if user_input:
     )
     try:
         with st.spinner("Working on user request..."):
-            relevant_chunks = fetch_similar_results(
-                user_input_embeddings, n_results=5, strategy=search_strategy
+            similar_chunks = fetch_similar_results(
+                user_input_embeddings,
+                n_results=SIMILAR_CHUNK_THRESHOLD,
+                strategy=search_strategy,
             )
-            prompt = f"User Question: {user_input}\n\nRelevant PDF Chunks:\n"
-            for i, chunk in enumerate(relevant_chunks["documents"][0]):
-                prompt += f"Chunk {i + 1}: {chunk}\n"
-            prompt += "\nPlease provide a detailed answer based on the relevant PDF chunks. If the answer is not found in the provided chunks, please respond with 'I don't know.'"
+            similar_docs = similar_chunks["documents"][0]
+            similar_metadatas = similar_chunks.get("metadatas", [[]])[0]
+            document_names = {}
+            for document, metadata in zip(similar_docs, similar_metadatas):
+                document_names.setdefault(document, set()).add(
+                    (metadata or {}).get("doc_name", "Unknown document")
+                )
+            filtered_similar_docs = [
+                document
+                for document in similar_docs
+                if len(document) > CHUNK_FILTER_THRESHOLD
+            ]
+            ranked_docs = rerank_docs(user_input, filtered_similar_docs)
+            prompt = f"User Question: {user_input}\n\nRelevant Chunks:\n"
+            for doc in ranked_docs:
+                sources = ", ".join(
+                    sorted(document_names.get(doc["document"], {"Unknown document"}))
+                )
+                prompt += (
+                    f"Chunk Score {doc['score']} (Document: {sources}): "
+                    f"{doc['document']}\n"
+                )
+            prompt += "\nPlease provide an answer in 250 words based on the relevant chunks. Look at the chunk scores and decide which chunks to use. At the end, list the document names (doc_name) for the sources you actually used under 'Documents used'. If the answer is not found in the provided chunks, respond with 'I don't know.'"
+
             request_args = {
                 "model": os.getenv("OPENAI_MODEL"),
                 "input": prompt,

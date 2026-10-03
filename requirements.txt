@@ -7,3 +7,5 @@ pypdf
 chromadb
 scikit-learn
 langchain-text-splitters
+sentence-transformers
+torchvision
