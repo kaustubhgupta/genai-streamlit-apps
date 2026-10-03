@@ -1,19 +1,21 @@
+from functools import lru_cache
+
 from sentence_transformers import CrossEncoder
-from dotenv import load_dotenv
-
-load_dotenv()
 
 
-reranker = CrossEncoder("BAAI/bge-reranker-v2-m3")
+@lru_cache(maxsize=1)
+def get_reranker() -> CrossEncoder:
+    return CrossEncoder("BAAI/bge-reranker-v2-m3")
+
+
+def warmup() -> None:
+    """Call once at server startup so the first tool call isn't slow."""
+    get_reranker().predict([["warmup", "warmup"]])
 
 
 def rerank_docs(query, docs, top_k=3):
-    pairs = [[query, document] for document in docs]
-    scores = reranker.predict(pairs)
-    ranked_documents = sorted(zip(docs, scores), key=lambda x: x[1], reverse=True)
-
-    top_documents = [
-        {"document": document, "score": score}
-        for document, score in ranked_documents[:top_k]
-    ]
-    return top_documents
+    if not docs:
+        return []
+    scores = get_reranker().predict([[query, doc] for doc in docs])
+    ranked = sorted(zip(docs, scores), key=lambda x: x[1], reverse=True)
+    return [{"document": doc, "score": float(score)} for doc, score in ranked[:top_k]]

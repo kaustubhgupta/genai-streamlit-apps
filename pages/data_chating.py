@@ -1,5 +1,7 @@
 import streamlit as st
 import os
+import json
+import uuid
 from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -15,7 +17,50 @@ st.title("Data Chat")
 if "chat_messages" not in st.session_state:
     st.session_state.chat_messages = []
 if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
+    try:
+        direct_db_access("CREATE SCHEMA IF NOT EXISTS data_chat_assistant")
+        direct_db_access("""
+            CREATE TABLE IF NOT EXISTS data_chat_assistant.data_chat_history (
+                id TEXT PRIMARY KEY,
+                timestamp TIMESTAMPTZ NOT NULL,
+                question TEXT NOT NULL,
+                selected_schema TEXT NOT NULL,
+                selected_tables JSONB NOT NULL,
+                messages JSONB NOT NULL
+            )
+            """)
+        _, stored_chats = direct_db_access("""
+            SELECT id, timestamp, question, selected_schema, selected_tables, messages
+            FROM data_chat_assistant.data_chat_history
+            ORDER BY timestamp
+            """)
+        st.session_state.chat_history = [
+            {
+                "id": chat_id,
+                "timestamp": timestamp,
+                "question": question,
+                "schema": selected_schema,
+                "tables": (
+                    json.loads(selected_tables)
+                    if isinstance(selected_tables, str)
+                    else selected_tables
+                ),
+                "messages": (
+                    json.loads(messages) if isinstance(messages, str) else messages
+                ),
+            }
+            for (
+                chat_id,
+                timestamp,
+                question,
+                selected_schema,
+                selected_tables,
+                messages,
+            ) in (stored_chats or [])
+        ]
+    except Exception as exc:
+        st.session_state.chat_history = []
+        st.warning(f"Could not load chat history from PostgreSQL: {exc}")
 
 
 @st.cache_data
@@ -51,6 +96,8 @@ def restore_chat(chat_id):
         item for item in st.session_state.chat_history if item["id"] == chat_id
     )
     schema = history_item["schema"]
+    if schema not in schema_tables:
+        schema = sorted(schema_tables)[0]
     st.session_state.selected_chat_id = chat_id
     st.session_state.chat_messages = [
         dict(message) for message in history_item["messages"]
@@ -61,6 +108,14 @@ def restore_chat(chat_id):
         for table in history_item["tables"]
         if table in schema_tables.get(schema, [])
     ]
+
+
+def start_new_chat():
+    st.session_state.chat_messages = []
+    st.session_state.pop("selected_chat_id", None)
+    st.session_state["history_selection"] = None
+    st.session_state.selected_tables = []
+    st.session_state.selected_schema = sorted(schema_tables)[0]
 
 
 # The radio widget updates its session-state value before the next script run.
@@ -82,11 +137,7 @@ with st.sidebar:
     selected_tables = st.multiselect(
         "Tables", schema_tables[selected_schema], key="selected_tables"
     )
-    if st.button("New chat"):
-        st.session_state.chat_messages = []
-        st.session_state.pop("selected_chat_id", None)
-        st.session_state.pop("history_selection", None)
-        st.rerun()
+    st.button("New chat", on_click=start_new_chat)
 
     if st.session_state.chat_history:
         history_items = list(reversed(st.session_state.chat_history))
@@ -125,7 +176,7 @@ def save_chat_history(question):
     )
 
     if history_item is None:
-        chat_id = len(st.session_state.chat_history)
+        chat_id = str(uuid.uuid4())
         history_item = {
             "id": chat_id,
             "timestamp": datetime.now(),
@@ -137,9 +188,35 @@ def save_chat_history(question):
         st.session_state.chat_history.append(history_item)
         st.session_state.selected_chat_id = chat_id
 
+    history_item["schema"] = selected_schema
+    history_item["tables"] = list(selected_tables)
     history_item["messages"] = [
         dict(message) for message in st.session_state.chat_messages
     ]
+
+    def sql_literal(value):
+        if value is None:
+            return "NULL"
+        return "'" + str(value).replace("'", "''") + "'"
+
+    tables_json = json.dumps(history_item["tables"])
+    messages_json = json.dumps(st.session_state.chat_messages, default=str)
+    direct_db_access(f"""
+        INSERT INTO data_chat_assistant.data_chat_history
+            (id, timestamp, question, selected_schema, selected_tables, messages)
+        VALUES (
+            {sql_literal(chat_id)},
+            {sql_literal(history_item['timestamp'].isoformat())}::timestamptz,
+            {sql_literal(history_item['question'])},
+            {sql_literal(history_item['schema'])},
+            {sql_literal(tables_json)}::jsonb,
+            {sql_literal(messages_json)}::jsonb
+        )
+        ON CONFLICT (id) DO UPDATE SET
+            selected_schema = EXCLUDED.selected_schema,
+            selected_tables = EXCLUDED.selected_tables,
+            messages = EXCLUDED.messages
+        """)
 
 
 user_input = st.chat_input("Ask a question or follow up...")

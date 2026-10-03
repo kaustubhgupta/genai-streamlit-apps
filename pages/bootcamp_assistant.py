@@ -1,19 +1,15 @@
 import streamlit as st
 import os
+import json
+import uuid
 from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
-from utility.utilities.embedding_chunking_utilities import (
-    generate_single_sentence_embeddings,
-)
-from utility.utilities.vectordb_utilities import fetch_similar_results
-from utility.utilities.chunk_reranker import rerank_docs
+from utility.tools.rag_query_tools import RAG_QUERY_TOOLS, RAG_TOOLS_MAPPING
+from utility.tools.pg_tools import direct_db_access
 
 load_dotenv()
-
-CHUNK_FILTER_THRESHOLD = int(os.environ.get("CHUNK_FILTER_THRESHOLD"))
-SIMILAR_CHUNK_THRESHOLD = int(os.environ.get("SIMILAR_CHUNK_THRESHOLD"))
 
 st.set_page_config(
     page_title="Bootcamp Assistant", page_icon=":bar_chart:", layout="wide"
@@ -21,24 +17,73 @@ st.set_page_config(
 st.title("Bootcamp Assistant")
 
 
+def normalize_response_tool(tool):
+    """Convert Chat Completions-style tools to Responses API format."""
+    tool = dict(tool)
+    function = tool.pop("function", None)
+    if function:
+        tool.update(function)
+    return tool
+
+
+ALL_TOOLS = [normalize_response_tool(tool) for tool in RAG_QUERY_TOOLS]
+ALL_TOOLS_MAPPINGS = {**RAG_TOOLS_MAPPING}
+
+
 if "bootcamp_chat_messages" not in st.session_state:
     st.session_state.bootcamp_chat_messages = []
 if "bootcamp_chat_history" not in st.session_state:
-    st.session_state.bootcamp_chat_history = []
+    try:
+        direct_db_access("CREATE SCHEMA IF NOT EXISTS bootcamp_assistant")
+        direct_db_access("""
+            CREATE TABLE IF NOT EXISTS bootcamp_assistant.bootcamp_chat_history (
+                id TEXT PRIMARY KEY,
+                timestamp TIMESTAMPTZ NOT NULL,
+                question TEXT NOT NULL,
+                messages JSONB NOT NULL,
+                response_id TEXT
+            )
+            """)
+        _, stored_chats = direct_db_access("""
+            SELECT id, timestamp, question, messages, response_id
+            FROM bootcamp_assistant.bootcamp_chat_history
+            ORDER BY timestamp
+            """)
+        st.session_state.bootcamp_chat_history = [
+            {
+                "id": chat_id,
+                "timestamp": timestamp,
+                "question": question,
+                "messages": (
+                    json.loads(messages) if isinstance(messages, str) else messages
+                ),
+                "response_id": response_id,
+            }
+            for chat_id, timestamp, question, messages, response_id in (
+                stored_chats or []
+            )
+        ]
+    except Exception as exc:
+        st.session_state.bootcamp_chat_history = []
+        st.warning(f"Could not load chat history from PostgreSQL: {exc}")
 
 
 def restore_chat(chat_id):
     history_item = next(
         item for item in st.session_state.bootcamp_chat_history if item["id"] == chat_id
     )
-    st.session_state.selected_chat_id = chat_id
+    st.session_state.bootcamp_selected_chat_id = chat_id
     st.session_state.bootcamp_chat_messages = [
         dict(message) for message in history_item["messages"]
     ]
-    st.session_state.last_response_id = history_item.get("response_id")
-    st.session_state.bootcamp_search_strategy = history_item.get(
-        "search_strategy", "recursive"
-    )
+    st.session_state.bootcamp_last_response_id = history_item.get("response_id")
+
+
+def start_new_chat():
+    st.session_state.bootcamp_chat_messages = []
+    st.session_state.pop("bootcamp_selected_chat_id", None)
+    st.session_state.pop("bootcamp_last_response_id", None)
+    st.session_state["bootcamp_history_selection"] = None
 
 
 # The radio widget updates its session-state value before the next script run.
@@ -46,7 +91,7 @@ def restore_chat(chat_id):
 history_selection = st.session_state.get("bootcamp_history_selection")
 if (
     history_selection is not None
-    and history_selection != st.session_state.get("selected_chat_id")
+    and history_selection != st.session_state.get("bootcamp_selected_chat_id")
     and any(
         item["id"] == history_selection
         for item in st.session_state.bootcamp_chat_history
@@ -57,12 +102,6 @@ if (
 with st.sidebar:
 
     st.subheader("Available resources")
-    search_strategy = st.selectbox(
-        "Search strategy",
-        options=["recursive", "fixed", "semantic"],
-        index=0,
-        key="bootcamp_search_strategy",
-    )
     notes_dir = Path(__file__).resolve().parent.parent / "bootcamp_material"
     resource_paths = sorted(
         (
@@ -79,12 +118,7 @@ with st.sidebar:
     else:
         st.caption("No resources found in the notes folder.")
 
-    if st.button("New chat"):
-        st.session_state.bootcamp_chat_messages = []
-        st.session_state.pop("bootcamp_selected_chat_id", None)
-        st.session_state.pop("bootcamp_last_response_id", None)
-        st.session_state.pop("bootcamp_history_selection", None)
-        st.rerun()
+    st.button("New chat", on_click=start_new_chat)
 
     if st.session_state.bootcamp_chat_history:
         history_items = list(reversed(st.session_state.bootcamp_chat_history))
@@ -114,7 +148,7 @@ for message in st.session_state.bootcamp_chat_messages:
             )
 
 
-def save_chat_history(question, response_id, search_strategy):
+def save_chat_history(question, response_id):
     """Create a history entry for a new chat or update the active chat."""
     chat_id = st.session_state.get("bootcamp_selected_chat_id")
     history_item = next(
@@ -127,14 +161,13 @@ def save_chat_history(question, response_id, search_strategy):
     )
 
     if history_item is None:
-        chat_id = len(st.session_state.bootcamp_chat_history)
+        chat_id = str(uuid.uuid4())
         history_item = {
             "id": chat_id,
             "timestamp": datetime.now(),
             "question": question,
             "messages": [],
             "response_id": response_id,
-            "search_strategy": search_strategy,
         }
         st.session_state.bootcamp_chat_history.append(history_item)
         st.session_state.bootcamp_selected_chat_id = chat_id
@@ -143,58 +176,81 @@ def save_chat_history(question, response_id, search_strategy):
         dict(message) for message in st.session_state.bootcamp_chat_messages
     ]
     history_item["response_id"] = response_id
-    history_item["search_strategy"] = search_strategy
     st.session_state.bootcamp_last_response_id = response_id
+
+    def sql_literal(value):
+        if value is None:
+            return "NULL"
+        return "'" + str(value).replace("'", "''") + "'"
+
+    messages_json = json.dumps(st.session_state.bootcamp_chat_messages)
+    direct_db_access(f"""
+        INSERT INTO bootcamp_assistant.bootcamp_chat_history
+            (id, timestamp, question, messages, response_id)
+        VALUES (
+            {sql_literal(chat_id)},
+            {sql_literal(history_item['timestamp'].isoformat())}::timestamptz,
+            {sql_literal(history_item['question'])},
+            {sql_literal(messages_json)}::jsonb,
+            {sql_literal(response_id)}
+        )
+        ON CONFLICT (id) DO UPDATE SET
+            messages = EXCLUDED.messages,
+            response_id = EXCLUDED.response_id
+        """)
 
 
 user_input = st.chat_input("Ask a question or follow up...")
 
 
 if user_input:
-    user_input_embeddings = generate_single_sentence_embeddings(
-        user_input,
-    )
+
     try:
         with st.spinner("Working on user request..."):
-            similar_chunks = fetch_similar_results(
-                user_input_embeddings,
-                n_results=SIMILAR_CHUNK_THRESHOLD,
-                strategy=search_strategy,
-            )
-            similar_docs = similar_chunks["documents"][0]
-            similar_metadatas = similar_chunks.get("metadatas", [[]])[0]
-            document_names = {}
-            for document, metadata in zip(similar_docs, similar_metadatas):
-                document_names.setdefault(document, set()).add(
-                    (metadata or {}).get("doc_name", "Unknown document")
-                )
-            filtered_similar_docs = [
-                document
-                for document in similar_docs
-                if len(document) > CHUNK_FILTER_THRESHOLD
-            ]
-            ranked_docs = rerank_docs(user_input, filtered_similar_docs)
-            prompt = f"User Question: {user_input}\n\nRelevant Chunks:\n"
-            for doc in ranked_docs:
-                sources = ", ".join(
-                    sorted(document_names.get(doc["document"], {"Unknown document"}))
-                )
-                prompt += (
-                    f"Chunk Score {doc['score']} (Document: {sources}): "
-                    f"{doc['document']}\n"
-                )
-            prompt += "\nPlease provide an answer in 250 words based on the relevant chunks. Look at the chunk scores and decide which chunks to use. At the end, list the document names (doc_name) for the sources you actually used under 'Documents used'. If the answer is not found in the provided chunks, respond with 'I don't know.'"
+
+            prompt = f"User Question: {user_input}\n\nPlease provide an answer in 250 words and if needed, search for relevant chunks. Look at the chunk scores and decide which chunks to use. At the end, list the document names (doc_name) for the sources you actually used under 'Documents used'. If the answer is not found in the provided chunks, respond with 'I don't know.'"
 
             request_args = {
                 "model": os.getenv("OPENAI_MODEL"),
                 "input": prompt,
+                "tools": ALL_TOOLS,
             }
             previous_response_id = st.session_state.get("bootcamp_last_response_id")
             if previous_response_id:
                 request_args["previous_response_id"] = previous_response_id
 
-            response = OpenAI().responses.create(**request_args)
+            client = OpenAI()
+            response = client.responses.create(**request_args)
             response_id = response.id
+
+            while True:
+                tool_outputs = []
+                for item in response.output:
+                    if item.type == "function_call":
+                        args = json.loads(item.arguments)
+                        function_name = item.name
+                        call_function = ALL_TOOLS_MAPPINGS[function_name]
+                        st.info(f"Using tool: {function_name} with arguments: {args}")
+                        tool_result = call_function(**args)
+                        tool_outputs.append(
+                            {
+                                "type": "function_call_output",
+                                "call_id": item.call_id,
+                                "output": str(tool_result),
+                            }
+                        )
+
+                if not tool_outputs:
+                    break
+
+                response = client.responses.create(
+                    model=os.getenv("OPENAI_MODEL"),
+                    input=tool_outputs,
+                    previous_response_id=response_id,
+                    tools=ALL_TOOLS,
+                )
+                response_id = response.id
+
             output = response.output_text.strip()
 
             st.session_state.bootcamp_chat_messages.extend(
@@ -203,7 +259,7 @@ if user_input:
                     {"role": "assistant", "content": output},
                 ]
             )
-            save_chat_history(user_input, response_id, search_strategy)
+            save_chat_history(user_input, response_id)
         st.rerun()
     except Exception as exc:
         st.error(f"Could not generate or run the query: {exc}")
