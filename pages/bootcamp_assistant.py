@@ -101,7 +101,6 @@ if (
 
 with st.sidebar:
 
-
     st.button("New chat", on_click=start_new_chat)
 
     if st.session_state.bootcamp_chat_history:
