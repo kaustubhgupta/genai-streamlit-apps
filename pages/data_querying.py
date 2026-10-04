@@ -147,17 +147,18 @@ with st.sidebar:
     if st.session_state.question_history:
         history_items = list(reversed(st.session_state.question_history))
 
-        st.radio(
-            "Previous questions",
-            [item["id"] for item in history_items],
-            index=None,
-            format_func=lambda item_id: next(
-                f'{item["timestamp"]:%Y-%m-%d %H:%M} — {item["question"]}'
-                for item in history_items
-                if item["id"] == item_id
-            ),
-            key="selected_history_id",
-        )
+        with st.container(height=250, border=False):
+            st.radio(
+                "Previous questions",
+                [item["id"] for item in history_items],
+                index=None,
+                format_func=lambda history_id: next(
+                    f'{item["timestamp"]:%Y-%m-%d %H:%M} — {item["question"]}'
+                    for item in history_items
+                    if item["id"] == history_id
+                ),
+                key="selected_history_id",
+            )
     else:
         st.caption("No questions asked yet.")
 

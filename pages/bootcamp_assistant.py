@@ -101,39 +101,24 @@ if (
 
 with st.sidebar:
 
-    st.subheader("Available resources")
-    notes_dir = Path(__file__).resolve().parent.parent / "bootcamp_material"
-    resource_paths = sorted(
-        (
-            path.relative_to(notes_dir)
-            for path in notes_dir.rglob("*")
-            if path.is_file()
-        ),
-        key=lambda path: str(path).lower(),
-    )
-    if resource_paths:
-        with st.container(height=250, border=True):
-            for resource_path in resource_paths:
-                st.write(f"• {resource_path}")
-    else:
-        st.caption("No resources found in the notes folder.")
 
     st.button("New chat", on_click=start_new_chat)
 
     if st.session_state.bootcamp_chat_history:
         history_items = list(reversed(st.session_state.bootcamp_chat_history))
 
-        st.radio(
-            "Previous chats",
-            [item["id"] for item in history_items],
-            index=None,
-            format_func=lambda item_id: next(
-                f'{item["timestamp"]:%Y-%m-%d %H:%M} — {item["question"]}'
-                for item in history_items
-                if item["id"] == item_id
-            ),
-            key="bootcamp_history_selection",
-        )
+        with st.container(height=250, border=False):
+            st.radio(
+                "Previous chats",
+                [item["id"] for item in history_items],
+                index=None,
+                format_func=lambda item_id: next(
+                    f'{item["timestamp"]:%Y-%m-%d %H:%M} — {item["question"]}'
+                    for item in history_items
+                    if item["id"] == item_id
+                ),
+                key="bootcamp_history_selection",
+            )
     else:
         st.caption("No previous chats yet.")
 

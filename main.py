@@ -21,13 +21,15 @@ def master_page():
 
 
 PAGE_NAMES = {
-    "data_querying.py": "Data Querying",
-    "data_chating.py": "Data Chat",
-    "database_assisstant.py": "Database Assistant",
-    "bootcamp_assistant.py": "Bootcamp Assistant",
+    "ingestion_manager.py": "0. Ingestion Manager",
+    "data_querying.py": "1. Data Querying",
+    "data_chating.py": "2. Data Chat",
+    "database_assisstant.py": "3. Database Assistant",
+    "bootcamp_assistant.py": "4. Bootcamp Assistant",
 }
 
 PAGE_ORDER = [
+    "ingestion_manager.py",
     "data_querying.py",
     "data_chating.py",
     "database_assisstant.py",
