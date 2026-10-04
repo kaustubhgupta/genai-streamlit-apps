@@ -28,3 +28,15 @@ def fetch_similar_results(embeds, n_results=3, strategy="recursive"):
         raise ValueError("strategy must be 'fixed' or 'recursive'")
 
     return collection.query(query_embeddings=embeds, n_results=n_results)
+
+
+def fetch_docs_for_keyword_search(strategy):
+    if strategy == "fixed":
+        collection = fixed_chunking_collection
+    elif strategy == "recursive":
+        collection = recursive_chunking_collection
+    else:
+        raise ValueError("strategy must be 'fixed' or 'recursive'")
+
+    all_docs = collection.get(include=["documents", "metadatas"])
+    return all_docs

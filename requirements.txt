@@ -9,3 +9,5 @@ scikit-learn
 langchain-text-splitters
 sentence-transformers
 torchvision
+rank-bm25
+nltk
