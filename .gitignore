@@ -2,6 +2,7 @@
 .vscode
 __pycache__
 *.pyc
+.deepeval
 chroma_db
 chroma
 notes

@@ -1,6 +1,7 @@
 import streamlit as st
 import os
 import json
+import re
 import uuid
 from datetime import datetime
 from dotenv import load_dotenv
@@ -28,6 +29,34 @@ def normalize_response_tool(tool):
 
 ALL_TOOLS = [normalize_response_tool(tool) for tool in PG_TOOLS + CALENDAR_TOOLS]
 ALL_TOOLS_MAPPINGS = {**PG_TOOLS_MAPPING, **CALENDAR_TOOLS_MAPPING}
+
+
+def ensure_non_destructive_tool_call(function_name, args):
+    """Allow schema changes, but prevent tools from deleting data or objects."""
+    if re.search(r"\b(delete|remove|drop|truncate)\b", function_name, re.IGNORECASE):
+        raise ValueError("Delete, drop, and truncate operations are not allowed.")
+
+    def find_sql(value):
+        if isinstance(value, dict):
+            for key, nested_value in value.items():
+                if re.search(r"(query|sql|statement)", str(key), re.IGNORECASE):
+                    yield from find_sql(nested_value)
+                else:
+                    yield from find_sql(nested_value)
+        elif isinstance(value, (list, tuple)):
+            for nested_value in value:
+                yield from find_sql(nested_value)
+        elif isinstance(value, str):
+            yield value
+
+    for sql in find_sql(args):
+        # Ignore comments and string literals so harmless mentions of these words
+        # do not trigger the guard.
+        sql = re.sub(r"--[^\n]*|/\*.*?\*/", " ", sql, flags=re.DOTALL)
+        sql = re.sub(r"'(?:''|[^'])*'", "''", sql)
+        if re.search(r"\b(delete|truncate|drop)\b", sql, re.IGNORECASE):
+            raise ValueError("DELETE, DROP, and TRUNCATE operations are not allowed.")
+
 
 if "database_chat_messages" not in st.session_state:
     st.session_state.database_chat_messages = []
@@ -212,7 +241,15 @@ if user_input:
                         function_name = item.name
                         call_function = ALL_TOOLS_MAPPINGS[function_name]
                         st.info(f"Using tool: {function_name}")
-                        tool_result = call_function(**args)
+                        try:
+                            ensure_non_destructive_tool_call(function_name, args)
+                        except ValueError as exc:
+                            tool_result = (
+                                f"Tool call rejected: {exc} Do not attempt destructive "
+                                "actions; offer a safe, non-destructive alternative instead."
+                            )
+                        else:
+                            tool_result = call_function(**args)
                         tool_call_id = item.call_id
                         tool_outputs.append(
                             {

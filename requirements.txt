@@ -11,3 +11,4 @@ sentence-transformers
 torchvision
 rank-bm25
 nltk
+deepeval

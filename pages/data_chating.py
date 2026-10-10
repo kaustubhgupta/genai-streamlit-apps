@@ -63,7 +63,6 @@ if "chat_history" not in st.session_state:
         st.warning(f"Could not load chat history from PostgreSQL: {exc}")
 
 
-@st.cache_data
 def get_schema_tables():
     return load_schema_tables()
 

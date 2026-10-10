@@ -2,7 +2,6 @@ import streamlit as st
 import os
 import json
 import uuid
-from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -215,7 +214,13 @@ if user_input:
                         function_name = item.name
                         call_function = ALL_TOOLS_MAPPINGS[function_name]
                         st.info(f"Using tool: {function_name} with arguments: {args}")
-                        tool_result = call_function(**args)
+                        try:
+                            tool_result = call_function(**args)
+                        except IndexError:
+                            # Empty RAG results can cause tools to index a
+                            # nonexistent first chunk. Let the model handle the
+                            # empty result instead of failing the whole request.
+                            tool_result = "No results found. exit"
                         tool_outputs.append(
                             {
                                 "type": "function_call_output",
