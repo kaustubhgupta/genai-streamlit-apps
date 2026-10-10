@@ -5,13 +5,15 @@ client = chromadb.PersistentClient()
 fixed_chunking_collection = client.get_or_create_collection("fixed_chunking")
 recursive_chunking_collection = client.get_or_create_collection("recursive_chunking")
 
+collection_mapping = {
+    "fixed": fixed_chunking_collection,
+    "recursive": recursive_chunking_collection,
+}
+
 
 def ingest_embeddings(ids, embeddings, documents, metadatas, strategy, doc_name):
-    if strategy == "fixed":
-        collection = fixed_chunking_collection
-    elif strategy == "recursive":
-        collection = recursive_chunking_collection
-    else:
+    collection = collection_mapping.get(strategy)
+    if collection is None:
         raise ValueError("strategy must be 'fixed' or 'recursive'")
 
     collection.delete(where={"doc_name": {"$in": doc_name}})
@@ -22,22 +24,16 @@ def ingest_embeddings(ids, embeddings, documents, metadatas, strategy, doc_name)
 
 
 def de_ingest_embeddings(strategy, doc_name):
-    if strategy == "fixed":
-        collection = fixed_chunking_collection
-    elif strategy == "recursive":
-        collection = recursive_chunking_collection
-    else:
+    collection = collection_mapping.get(strategy)
+    if collection is None:
         raise ValueError("strategy must be 'fixed' or 'recursive'")
 
     collection.delete(where={"doc_name": {"$in": doc_name}})
 
 
 def list_docs_in_collection(strategy):
-    if strategy == "fixed":
-        collection = fixed_chunking_collection
-    elif strategy == "recursive":
-        collection = recursive_chunking_collection
-    else:
+    collection = collection_mapping.get(strategy)
+    if collection is None:
         raise ValueError("strategy must be 'fixed' or 'recursive'")
 
     all_docs = collection.get(include=["metadatas"])
@@ -50,22 +46,16 @@ def list_docs_in_collection(strategy):
 
 
 def fetch_similar_results(embeds, n_results=3, strategy="recursive"):
-    if strategy == "fixed":
-        collection = fixed_chunking_collection
-    elif strategy == "recursive":
-        collection = recursive_chunking_collection
-    else:
+    collection = collection_mapping.get(strategy)
+    if collection is None:
         raise ValueError("strategy must be 'fixed' or 'recursive'")
 
     return collection.query(query_embeddings=embeds, n_results=n_results)
 
 
 def fetch_docs_for_keyword_search(strategy):
-    if strategy == "fixed":
-        collection = fixed_chunking_collection
-    elif strategy == "recursive":
-        collection = recursive_chunking_collection
-    else:
+    collection = collection_mapping.get(strategy)
+    if collection is None:
         raise ValueError("strategy must be 'fixed' or 'recursive'")
 
     all_docs = collection.get(include=["documents", "metadatas"])
