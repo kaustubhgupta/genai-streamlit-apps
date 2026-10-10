@@ -49,8 +49,8 @@ available_names = {
 ingested_names = sorted(ingested_names)
 available_names = sorted(available_names)
 
-st.title("RAG Documents Ingestion Manager")
-st.write(f"Ingest documents from `{materials_folder}` into the RAG database.")
+st.title("Documents Ingestion Manager")
+st.write(f"Ingest documents from `{materials_folder}` into the database.")
 
 if st.session_state.pop("show_ingested_documents", False):
     st.session_state["ingestion_manager_tabs"] = "Currently ingested documents"
