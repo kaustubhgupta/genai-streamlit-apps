@@ -1,12 +1,12 @@
-from rank_bm25 import BM25Okapi
 import re
+
 import nltk
 from nltk.corpus import stopwords
 from nltk.stem import PorterStemmer
+from rank_bm25 import BM25Okapi
 
 nltk.download("stopwords")
 stemmer = PorterStemmer()
-
 stop_words = set(stopwords.words("english"))
 
 
@@ -15,8 +15,7 @@ def process_document(doc):
     doc_removed_punc = re.sub(r"[^\w\s]", "", doc_lower)
     doc_splited = doc_removed_punc.split(" ")
     doc_filtered_stopwords = [word for word in doc_splited if word not in stop_words]
-    doc_stemmed = [stemmer.stem(word) for word in doc_filtered_stopwords]
-    return doc_stemmed
+    return [stemmer.stem(word) for word in doc_filtered_stopwords]
 
 
 def keyword_search(chunks, user_query, top_chunks=5):

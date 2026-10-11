@@ -6,7 +6,16 @@ from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
 from utility.tools.pg_tools import direct_db_access, fetch_schema, load_schema_tables
-from utility.utilities.generic_utilities import contains_forbidden_sql_operation
+from utility.database.sql_utilities import (
+    contains_forbidden_sql_operation,
+    decode_json_value,
+    filter_excluded_schemas,
+    sql_literal,
+)
+from utility.ui.page_utilities import (
+    render_chat_messages,
+    render_history_selector,
+)
 
 load_dotenv()
 
@@ -40,14 +49,8 @@ if "chat_history" not in st.session_state:
                 "timestamp": timestamp,
                 "question": question,
                 "schema": selected_schema,
-                "tables": (
-                    json.loads(selected_tables)
-                    if isinstance(selected_tables, str)
-                    else selected_tables
-                ),
-                "messages": (
-                    json.loads(messages) if isinstance(messages, str) else messages
-                ),
+                "tables": decode_json_value(selected_tables),
+                "messages": decode_json_value(messages),
             }
             for (
                 chat_id,
@@ -73,17 +76,7 @@ except Exception as exc:
     st.error(f"Could not load database metadata: {exc}")
     st.stop()
 
-excluded_schemas = {
-    schema.strip().lower()
-    for schema in os.getenv("EXCLUDED_SCHEMAS", "").split(",")
-    if schema.strip()
-}
-
-schema_tables = {
-    schema: tables
-    for schema, tables in schema_tables.items()
-    if schema.lower() not in excluded_schemas
-}
+schema_tables = filter_excluded_schemas(schema_tables)
 
 if not schema_tables:
     st.warning("No schemas with tables were found in the database.")
@@ -138,33 +131,15 @@ with st.sidebar:
     )
     st.button("New chat", on_click=start_new_chat)
 
-    if st.session_state.chat_history:
-        history_items = list(reversed(st.session_state.chat_history))
-
-        with st.container(height=250, border=False):
-            st.radio(
-                "Previous chats",
-                [item["id"] for item in history_items],
-                index=None,
-                format_func=lambda item_id: next(
-                    f'{item["timestamp"]:%Y-%m-%d %H:%M} — {item["question"]}'
-                    for item in history_items
-                    if item["id"] == item_id
-                ),
-                key="history_selection",
-            )
-    else:
-        st.caption("No previous chats yet.")
+    render_history_selector(
+        st.session_state.chat_history,
+        "history_selection",
+        "Previous chats",
+        "No previous chats yet.",
+    )
 
 
-for message in st.session_state.chat_messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
-        if message.get("rows"):
-            st.dataframe(
-                [dict(zip(message["columns"], row)) for row in message["rows"]],
-                use_container_width=True,
-            )
+render_chat_messages(st.session_state.chat_messages)
 
 
 def save_chat_history(question):
@@ -193,11 +168,6 @@ def save_chat_history(question):
     history_item["messages"] = [
         dict(message) for message in st.session_state.chat_messages
     ]
-
-    def sql_literal(value):
-        if value is None:
-            return "NULL"
-        return "'" + str(value).replace("'", "''") + "'"
 
     tables_json = json.dumps(history_item["tables"])
     messages_json = json.dumps(st.session_state.chat_messages, default=str)

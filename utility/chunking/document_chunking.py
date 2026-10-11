@@ -1,39 +1,18 @@
-from openai import OpenAI
-from dotenv import load_dotenv
-from pypdf import PdfReader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 import os
+
+from dotenv import load_dotenv
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from pypdf import PdfReader
 
 load_dotenv()
 
-client = OpenAI()
-model_name = os.environ.get("OPENAI_EMBEDDING_MODEL")
-num_dims = int(os.environ.get("OPENAI_EMBEDDING_DIM"))
 chunk_size = int(os.environ.get("CHUNKING_SIZE"))
 chunk_overlap_size = int(os.environ.get("CHUNK_OVERLAP_SIZE"))
 
 
-def generate_single_sentence_embeddings(input_sentence, dimensions=num_dims):
-
-    response = client.embeddings.create(
-        input=input_sentence, model=model_name, dimensions=dimensions
-    )
-
-    return response.data[0].embedding
-
-
-def generate_batch_sentences_embeddings(sentences, dimensions=num_dims):
-    response = client.embeddings.create(
-        input=sentences, model=model_name, dimensions=dimensions
-    )
-
-    embeddings = [item.embedding for item in response.data]
-    return embeddings
-
-
 def _read_text_file(file_path):
-    with open(file_path, "r") as f:
-        return f.read()
+    with open(file_path, "r") as file:
+        return file.read()
 
 
 def _read_pdf_file(file_path):
@@ -70,7 +49,7 @@ def _generate_chunks(
             chunk_size=chunk_size, chunk_overlap=chunk_overlap_size
         )
         chunks = splitter.split_text(text)
-        ids = [f"{file_path}_{i}" for i in range(len(chunks))]
+        ids = [f"{file_path}_{index}" for index in range(len(chunks))]
     else:
         raise ValueError("strategy must be 'fixed' or 'recursive'")
 

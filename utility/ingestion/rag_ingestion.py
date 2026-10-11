@@ -1,13 +1,13 @@
 from pathlib import Path
 
-from utility.utilities.embedding_chunking_utilities import (
-    generate_batch_sentences_embeddings,
+from utility.chunking.document_chunking import (
     generate_fixed_pdf_chunks,
     generate_fixed_text_chunks,
     generate_recursive_pdf_chunks,
     generate_recursive_text_chunks,
 )
-from utility.utilities.vectordb_utilities import (
+from utility.embeddings.openai_embeddings import generate_batch_sentences_embeddings
+from utility.retrieval.vector_store import (
     ingest_embeddings,
     de_ingest_embeddings,
     list_docs_in_collection,

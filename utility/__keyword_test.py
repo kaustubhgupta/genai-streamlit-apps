@@ -1,4 +1,4 @@
-from utilities.keyword_based_search import keyword_search
+from utility.retrieval.keyword_search import keyword_search
 
 chunks = [
     "dbt is a SQL transformation framework and engine.",

@@ -1,5 +1,5 @@
 from deepeval.synthesizer import Synthesizer
-from utility.utilities.vectordb_utilities import fetch_docs_by_filename
+from utility.retrieval.vector_store import fetch_docs_by_filename
 from pathlib import Path
 import os
 

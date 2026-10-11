@@ -14,6 +14,17 @@ This project is part of the **GenAI Bootcamp**. It provides Streamlit applicatio
 
 All applications are available from the main interface and can be switched between using the sidebar.
 
+## Utility package
+
+Reusable application logic is grouped by responsibility under `utility/`:
+
+- `chunking/` — document text extraction and chunk generation.
+- `embeddings/` — embedding model client and embedding generation.
+- `retrieval/` — vector-store access, keyword search, and reranking.
+- `database/` — SQL validation, database serialization, and schema filtering.
+- `ui/` — shared Streamlit history and chat rendering components.
+- `ingestion/`, `evaluation/`, and `tools/` — ingestion workflows, evaluation, and tool integrations.
+
 ## Usage
 
 Open the application and use the sidebar to select the tool you want to explore. For the querying and chat applications, choose a schema and at least one table before asking a question. Previous questions and conversations can be restored from the sidebar.

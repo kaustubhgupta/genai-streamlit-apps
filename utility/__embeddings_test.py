@@ -1,5 +1,5 @@
 from sklearn.metrics.pairwise import cosine_similarity, euclidean_distances
-from utilities.embedding_chunking_utilities import (
+from utility.embeddings.openai_embeddings import (
     generate_single_sentence_embeddings,
 )
 

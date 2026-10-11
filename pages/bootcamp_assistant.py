@@ -7,6 +7,9 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from utility.tools.rag_query_tools import RAG_QUERY_TOOLS, RAG_TOOLS_MAPPING
 from utility.tools.pg_tools import direct_db_access
+from utility.database.sql_utilities import decode_json_value, sql_literal
+from utility.tools.response_tool_utilities import normalize_response_tool
+from utility.ui.page_utilities import render_chat_messages, render_history_selector
 
 load_dotenv()
 
@@ -14,15 +17,6 @@ st.set_page_config(
     page_title="Bootcamp Assistant", page_icon=":bar_chart:", layout="wide"
 )
 st.title("Bootcamp Assistant")
-
-
-def normalize_response_tool(tool):
-    """Convert Chat Completions-style tools to Responses API format."""
-    tool = dict(tool)
-    function = tool.pop("function", None)
-    if function:
-        tool.update(function)
-    return tool
 
 
 ALL_TOOLS = [normalize_response_tool(tool) for tool in RAG_QUERY_TOOLS]
@@ -53,9 +47,7 @@ if "bootcamp_chat_history" not in st.session_state:
                 "id": chat_id,
                 "timestamp": timestamp,
                 "question": question,
-                "messages": (
-                    json.loads(messages) if isinstance(messages, str) else messages
-                ),
+                "messages": decode_json_value(messages),
                 "response_id": response_id,
             }
             for chat_id, timestamp, question, messages, response_id in (
@@ -102,33 +94,15 @@ with st.sidebar:
 
     st.button("New chat", on_click=start_new_chat)
 
-    if st.session_state.bootcamp_chat_history:
-        history_items = list(reversed(st.session_state.bootcamp_chat_history))
-
-        with st.container(height=250, border=False):
-            st.radio(
-                "Previous chats",
-                [item["id"] for item in history_items],
-                index=None,
-                format_func=lambda item_id: next(
-                    f'{item["timestamp"]:%Y-%m-%d %H:%M} — {item["question"]}'
-                    for item in history_items
-                    if item["id"] == item_id
-                ),
-                key="bootcamp_history_selection",
-            )
-    else:
-        st.caption("No previous chats yet.")
+    render_history_selector(
+        st.session_state.bootcamp_chat_history,
+        "bootcamp_history_selection",
+        "Previous chats",
+        "No previous chats yet.",
+    )
 
 
-for message in st.session_state.bootcamp_chat_messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
-        if message.get("rows"):
-            st.dataframe(
-                [dict(zip(message["columns"], row)) for row in message["rows"]],
-                use_container_width=True,
-            )
+render_chat_messages(st.session_state.bootcamp_chat_messages)
 
 
 def save_chat_history(question, response_id):
@@ -160,11 +134,6 @@ def save_chat_history(question, response_id):
     ]
     history_item["response_id"] = response_id
     st.session_state.bootcamp_last_response_id = response_id
-
-    def sql_literal(value):
-        if value is None:
-            return "NULL"
-        return "'" + str(value).replace("'", "''") + "'"
 
     messages_json = json.dumps(st.session_state.bootcamp_chat_messages)
     direct_db_access(f"""
@@ -210,7 +179,7 @@ if user_input:
                 tool_outputs = []
                 for item in response.output:
                     if item.type == "function_call":
-                        args = json.loads(item.arguments)
+                        args = decode_json_value(item.arguments)
                         function_name = item.name
                         call_function = ALL_TOOLS_MAPPINGS[function_name]
                         st.info(f"Using tool: {function_name} with arguments: {args}")

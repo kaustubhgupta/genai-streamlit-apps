@@ -1,8 +1,8 @@
-from utility.utilities.embedding_chunking_utilities import (
+from utility.embeddings.openai_embeddings import (
     generate_single_sentence_embeddings,
 )
-from utility.utilities.keyword_based_search import keyword_search
-from utility.utilities.vectordb_utilities import (
+from utility.retrieval.keyword_search import keyword_search
+from utility.retrieval.vector_store import (
     fetch_similar_results,
     fetch_docs_for_keyword_search,
 )
@@ -107,7 +107,7 @@ def query_rag_documents(
     )
 
     if rerank_flag:
-        from utility.utilities.chunk_reranker import rerank_docs
+        from utility.retrieval.reranker import rerank_docs
 
         final_docs = rerank_docs(user_input, final_chunks_before_rank, RERANK_TOP_K)
     else:

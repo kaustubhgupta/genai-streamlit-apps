@@ -20,6 +20,7 @@ load_dotenv()
 
 from utility.tools.rag_query_tools import query_rag_documents
 from utility.tools.pg_tools import direct_db_access
+from utility.database.sql_utilities import decode_json_value, sql_literal
 
 st.set_page_config(page_title="RAG Evaluator", page_icon=":bar_chart:", layout="wide")
 
@@ -115,12 +116,6 @@ def _generate_answer(user_input, retrieval_context):
     return response.output_text.strip()
 
 
-def _sql_literal(value):
-    if value is None:
-        return "NULL"
-    return "'" + str(value).replace("'", "''") + "'"
-
-
 def _remove_null_characters(value):
     if isinstance(value, str):
         # PostgreSQL JSONB rejects both NUL characters and JSON's escaped NUL.
@@ -155,9 +150,7 @@ def _load_evaluation_history():
             "evaluation_id": evaluation_id,
             "created_at": created_at,
             "dataset": dataset,
-            "evaluation": (
-                json.loads(evaluation) if isinstance(evaluation, str) else evaluation
-            ),
+            "evaluation": decode_json_value(evaluation),
         }
         for evaluation_id, created_at, dataset, evaluation in (rows or [])
     ]
@@ -628,10 +621,10 @@ if run_evaluation:
             INSERT INTO rag_evaluator.evaluation_history
                 (evaluation_id, created_at, dataset, evaluation)
             VALUES (
-                {_sql_literal(evaluation_id)},
-                {_sql_literal(created_at.isoformat())}::timestamptz,
-                {_sql_literal(dataset_source)},
-                {_sql_literal(json.dumps(st.session_state[RESULTS_KEY], ensure_ascii=False))}::jsonb
+                {sql_literal(evaluation_id)},
+                {sql_literal(created_at.isoformat())}::timestamptz,
+                {sql_literal(dataset_source)},
+                {sql_literal(json.dumps(st.session_state[RESULTS_KEY], ensure_ascii=False))}::jsonb
             )
             """)
         st.session_state[HISTORY_KEY].insert(0, evaluation_record)

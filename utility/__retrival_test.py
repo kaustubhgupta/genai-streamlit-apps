@@ -1,7 +1,7 @@
-from utilities.embedding_chunking_utilities import (
+from utility.embeddings.openai_embeddings import (
     generate_single_sentence_embeddings,
 )
-from utilities.vectordb_utilities import fetch_similar_results
+from utility.retrieval.vector_store import fetch_similar_results
 
 question = "how does tool calling works"
 question_embeds = generate_single_sentence_embeddings(question)

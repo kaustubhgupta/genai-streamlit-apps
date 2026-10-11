@@ -6,7 +6,13 @@ from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
 from utility.tools.pg_tools import direct_db_access, fetch_schema, load_schema_tables
-from utility.utilities.generic_utilities import StrictSQLQuery
+from utility.database.sql_utilities import (
+    StrictSQLQuery,
+    decode_json_value,
+    filter_excluded_schemas,
+    sql_literal,
+)
+from utility.ui.page_utilities import render_history_selector
 
 load_dotenv()
 
@@ -42,17 +48,11 @@ if "question_history" not in st.session_state:
                 "timestamp": timestamp,
                 "question": question,
                 "schema": selected_schema,
-                "tables": (
-                    json.loads(selected_tables)
-                    if isinstance(selected_tables, str)
-                    else selected_tables
-                ),
+                "tables": decode_json_value(selected_tables),
                 "query": generated_query,
                 "operation_type": operation_type,
                 "result": (
-                    tuple(json.loads(result) if isinstance(result, str) else result)
-                    if result is not None
-                    else None
+                    tuple(decode_json_value(result)) if result is not None else None
                 ),
             }
             for (
@@ -84,17 +84,7 @@ except Exception as exc:
     st.error(f"Could not load database metadata: {exc}")
     st.stop()
 
-excluded_schemas = {
-    schema.strip().lower()
-    for schema in os.getenv("EXCLUDED_SCHEMAS", "").split(",")
-    if schema.strip()
-}
-
-schema_tables = {
-    schema: tables
-    for schema, tables in schema_tables.items()
-    if schema.lower() not in excluded_schemas
-}
+schema_tables = filter_excluded_schemas(schema_tables)
 
 if not schema_tables:
     st.warning("No schemas with tables were found in the database.")
@@ -144,31 +134,15 @@ with st.sidebar:
     st.header("Question history")
     st.button("New chat", on_click=start_new_chat)
 
-    if st.session_state.question_history:
-        history_items = list(reversed(st.session_state.question_history))
-
-        with st.container(height=250, border=False):
-            st.radio(
-                "Previous questions",
-                [item["id"] for item in history_items],
-                index=None,
-                format_func=lambda history_id: next(
-                    f'{item["timestamp"]:%Y-%m-%d %H:%M} — {item["question"]}'
-                    for item in history_items
-                    if item["id"] == history_id
-                ),
-                key="selected_history_id",
-            )
-    else:
-        st.caption("No questions asked yet.")
+    render_history_selector(
+        st.session_state.question_history,
+        "selected_history_id",
+        "Previous questions",
+        "No questions asked yet.",
+    )
 
 
 def save_question_history(history_item):
-    def sql_literal(value):
-        if value is None:
-            return "NULL"
-        return "'" + str(value).replace("'", "''") + "'"
-
     tables_json = json.dumps(history_item["tables"])
     result = history_item.get("result")
     result_json = json.dumps(result, default=str) if result is not None else None
