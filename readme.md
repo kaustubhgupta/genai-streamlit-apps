@@ -8,7 +8,8 @@ This project is part of the **GenAI Bootcamp**. It provides Streamlit applicatio
 1. **Database Querying** — Select a schema and tables, ask a question in plain English, generate a validated read-only SQL query, and view the results.
 2. **Data Chat** — Select data sources and chat with your data. The application generates and executes read-only SQL when needed, while supporting follow-up questions and chat history.
 3. **Database Assistant** — Ask database questions conversationally. The assistant can call database tools to inspect schemas and retrieve results, with support for follow-up conversations and saved chats.
-4. **Bootcamp Assistant** — Ask questions about the GenAI Bootcamp and receive answers based on the bootcamp content. The assistant can provide follow-up answers and save chat history."
+4. **Bootcamp Assistant** — Ask questions about the GenAI Bootcamp and receive answers based on the bootcamp content. The assistant can provide follow-up answers and save chat history.
+5. **RAG Evaluator** — Evaluate retrieved context against golden datasets using contextual recall and precision. Configure the dataset, retrieval settings, evaluation thresholds, and judge model in the UI. Answer generation is not run.
 
 
 All applications are available from the main interface and can be switched between using the sidebar.

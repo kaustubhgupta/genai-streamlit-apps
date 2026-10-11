@@ -18,6 +18,7 @@ def master_page():
         "2. **Data Chat** — Select data sources and chat with your data. The application generates and executes read-only SQL when needed, while supporting follow-up questions and chat history.\n"
         "3. **Database Assistant** — Ask database questions conversationally. The assistant can call database tools to inspect schemas and retrieve results, with support for follow-up conversations and saved chats.\n"
         "4. **Bootcamp Assistant** — Ask questions about the GenAI Bootcamp and receive answers based on the bootcamp content. The assistant can provide follow-up answers and save chat history.\n"
+        "5. **RAG Evaluator** — Evaluate retrieved context against golden datasets using contextual recall and precision, with configurable retrieval settings.\n"
     )
 
 
@@ -27,6 +28,7 @@ PAGE_NAMES = {
     "data_chating.py": "2. Data Chat",
     "database_assisstant.py": "3. Database Assistant",
     "bootcamp_assistant.py": "4. Bootcamp Assistant",
+    "rag_evaluator.py": "5. RAG Evaluator",
 }
 
 PAGE_ORDER = [
@@ -35,6 +37,7 @@ PAGE_ORDER = [
     "data_chating.py",
     "database_assisstant.py",
     "bootcamp_assistant.py",
+    "rag_evaluator.py",
 ]
 
 pages_dir = Path(__file__).parent / "pages"
