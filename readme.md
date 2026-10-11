@@ -4,6 +4,9 @@ This project is part of the **GenAI Bootcamp**. It provides Streamlit applicatio
 
 ## Available Applications
 
+<img width="959" height="477" alt="image" src="https://github.com/user-attachments/assets/ca2f4fcc-da64-4ab3-a0d9-dcd8b8c65937" />
+
+
 0. **Ingestion Manager** — Ingest data from PDF and text files. The application supports ingesting documents in fixed and recursive chunking strategies along with option to de ingest.
 1. **Database Querying** — Select a schema and tables, ask a question in plain English, generate a validated read-only SQL query, and view the results.
 2. **Data Chat** — Select data sources and chat with your data. The application generates and executes read-only SQL when needed, while supporting follow-up questions and chat history.
