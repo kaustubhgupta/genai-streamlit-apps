@@ -12,3 +12,5 @@ torchvision
 rank-bm25
 nltk
 deepeval
+langchain_community
+tiktoken

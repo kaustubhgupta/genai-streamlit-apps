@@ -9,7 +9,7 @@ load_dotenv()
 client = OpenAI()
 model_name = os.environ.get("OPENAI_EMBEDDING_MODEL")
 num_dims = int(os.environ.get("OPENAI_EMBEDDING_DIM"))
-chunk_size = int(os.environ.get("FIXED_CHUNKING_SIZE"))
+chunk_size = int(os.environ.get("CHUNKING_SIZE"))
 chunk_overlap_size = int(os.environ.get("CHUNK_OVERLAP_SIZE"))
 
 

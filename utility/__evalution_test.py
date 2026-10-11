@@ -8,6 +8,9 @@ from deepeval.metrics import (
 from deepeval.test_case import LLMTestCase
 from deepeval import evaluate
 from deepeval.evaluate.configs import CacheConfig
+import os
+
+model = os.getenv("OPENAI_EVAL_MODEL")
 
 query = "What is your refund policy?"
 
@@ -29,20 +32,18 @@ test_case = LLMTestCase(
     retrieval_context=retrieval_context,
 )
 
-recall_metric = ContextualRecallMetric(
-    threshold=0.7, model="gpt-4o", include_reason=True
-)
+recall_metric = ContextualRecallMetric(threshold=0.7, model=model, include_reason=True)
 precision_metric = ContextualPrecisionMetric(
-    threshold=0.7, model="gpt-4o", include_reason=True
+    threshold=0.7, model=model, include_reason=True
 )
 faithfulness_metric = FaithfulnessMetric(
-    threshold=0.7, model="gpt-4o", include_reason=True
+    threshold=0.7, model=model, include_reason=True
 )
 answer_relevancy_metric = AnswerRelevancyMetric(
-    threshold=0.7, model="gpt-4o", include_reason=True
+    threshold=0.7, model=model, include_reason=True
 )
 contextual_relevancy_metric = ContextualRelevancyMetric(
-    threshold=0.7, model="gpt-4o", include_reason=True
+    threshold=0.7, model=model, include_reason=True
 )
 evaluate(
     test_cases=[test_case],

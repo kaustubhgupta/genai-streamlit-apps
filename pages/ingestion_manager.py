@@ -11,6 +11,7 @@ from utility.ingestion.rag_ingestion import (
     ingest_materials,
     list_ingested_documents,
 )
+from utility.evaluation.golden_dataset_generation import generate_golden_dataset
 
 st.set_page_config(
     page_title="Ingestion Manager", page_icon=":file_folder:", layout="wide"
@@ -58,13 +59,21 @@ if st.session_state.pop("show_ingested_documents", False):
 if st.session_state.pop("show_deingested_documents", False):
     st.session_state["ingestion_manager_tabs"] = "Currently ingested documents"
     st.toast("Document de-ingestion completed.")
+if st.session_state.pop("show_generated_golden_datasets", False):
+    st.session_state["ingestion_manager_tabs"] = "Generate golden dataset"
+    st.toast("Golden dataset generation completed.")
 
 new_sources = set(available_names) - set(ingested_names)
 if new_sources:
     st.warning(f"New sources available to ingest!")
 
-ingested_tab, add_documents_tab, remove_documents_tab = st.tabs(
-    ["Currently ingested documents", "Add documents", "De-ingest documents"],
+ingested_tab, add_documents_tab, remove_documents_tab, golden_dataset_tab = st.tabs(
+    [
+        "Currently ingested documents",
+        "Add documents",
+        "De-ingest documents",
+        "Generate golden dataset",
+    ],
     key="ingestion_manager_tabs",
     on_change="rerun",
 )
@@ -234,3 +243,90 @@ with remove_documents_tab:
                 st.rerun()
             except Exception as exc:
                 st.error(f"Could not de-ingest documents: {exc}")
+
+with golden_dataset_tab:
+    st.subheader("Generate golden datasets")
+    st.write("Select ingested files. Selected files are processed in parallel.")
+    if not ingested_names:
+        st.info("There are no ingested documents to generate golden datasets for.")
+    else:
+        golden_dataset_dirs = {
+            Path("./golden_dataset"),
+            Path(__file__).resolve().parent.parent / "golden_dataset",
+        }
+        generated_datasets = {
+            name
+            for name in ingested_names
+            if any(
+                any(
+                    (directory / f"golden_{filename}.json").is_file()
+                    for filename in {Path(name).stem, Path(name).name}
+                )
+                for directory in golden_dataset_dirs
+            )
+        }
+        for name in ingested_names:
+            key = f"golden_dataset_{name}"
+            if key not in st.session_state:
+                st.session_state[key] = False
+        if st.session_state.pop("reset_golden_dataset_selections", False):
+            for name in ingested_names:
+                st.session_state[f"golden_dataset_{name}"] = False
+
+        pdf_column, txt_column = st.columns(2)
+        for column, extension, label in (
+            (pdf_column, ".pdf", "PDF documents"),
+            (txt_column, ".txt", "Text documents"),
+        ):
+            with column:
+                st.subheader(label)
+                for name in ingested_names:
+                    if name.lower().endswith(extension):
+                        key = f"golden_dataset_{name}"
+                        st.checkbox(
+                            name,
+                            key=key,
+                            disabled=name in generated_datasets,
+                        )
+
+        selected_files = [
+            name
+            for name in ingested_names
+            if name not in generated_datasets
+            and st.session_state.get(f"golden_dataset_{name}", False)
+        ]
+        if st.button(
+            "Generate golden datasets",
+            type="primary",
+            disabled=not selected_files,
+        ):
+            failures = []
+            try:
+                with st.spinner("Generating golden datasets..."):
+                    with ThreadPoolExecutor(max_workers=5) as executor:
+                        futures = {
+                            executor.submit(
+                                generate_golden_dataset,
+                                str(
+                                    Path(name)
+                                    if Path(name).is_absolute()
+                                    else materials_folder / name
+                                ),
+                            ): name
+                            for name in selected_files
+                        }
+                        for future, name in futures.items():
+                            try:
+                                future.result()
+                            except Exception as exc:
+                                failures.append(f"{name}: {exc}")
+                if failures:
+                    st.error(
+                        "Could not generate golden datasets for: " + "; ".join(failures)
+                    )
+                else:
+                    st.session_state["reset_golden_dataset_selections"] = True
+                    st.session_state["show_generated_golden_datasets"] = True
+                    st.rerun()
+            except Exception as exc:
+                st.error(f"Could not generate golden datasets: {exc}")

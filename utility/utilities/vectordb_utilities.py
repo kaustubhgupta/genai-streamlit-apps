@@ -60,3 +60,13 @@ def fetch_docs_for_keyword_search(strategy):
 
     all_docs = collection.get(include=["documents", "metadatas"])
     return all_docs
+
+
+def fetch_docs_by_filename(file_name, strategy):
+    collection = collection_mapping.get(strategy)
+    if collection is None:
+        raise ValueError("strategy must be 'fixed' or 'recursive'")
+    documents = collection.get(
+        where={"doc_name": {"$in": [file_name]}}, include=["documents", "metadatas"]
+    )
+    return documents
