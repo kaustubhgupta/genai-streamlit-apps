@@ -6,9 +6,15 @@ from datetime import datetime
 from pathlib import Path
 
 import streamlit as st
-from deepeval.metrics import ContextualPrecisionMetric, ContextualRecallMetric
+from deepeval.metrics import (
+    AnswerRelevancyMetric,
+    ContextualPrecisionMetric,
+    ContextualRecallMetric,
+    FaithfulnessMetric,
+)
 from deepeval.test_case import LLMTestCase
 from dotenv import load_dotenv
+from openai import OpenAI
 
 load_dotenv()
 
@@ -92,6 +98,23 @@ def _score_metric(metric_class, threshold, model, test_case):
     }
 
 
+def _generate_answer(user_input, retrieval_context):
+    model = os.getenv("OPENAI_MODEL")
+    if not model:
+        raise ValueError("OPENAI_MODEL must be set to generate answers.")
+
+    response = OpenAI().responses.create(
+        model=model,
+        input=(
+            "Answer the user's question using only the retrieved context below. "
+            "If the context does not contain the answer, say so.\n\n"
+            f"Retrieved context:\n{'\n\n'.join(retrieval_context)}\n\n"
+            f"User question: {user_input}"
+        ),
+    )
+    return response.output_text.strip()
+
+
 def _sql_literal(value):
     if value is None:
         return "NULL"
@@ -157,6 +180,8 @@ with st.sidebar:
     ):
         st.session_state[HISTORY_SELECTION_KEY] = None
         st.session_state["rag_evaluator_reset_config"] = True
+        st.session_state["rag_evaluator_hide_previous_results"] = True
+        st.session_state.pop(RESULTS_KEY, None)
         st.session_state.pop("rag_evaluator_config_token", None)
     history = st.session_state[HISTORY_KEY]
     if history:
@@ -194,7 +219,7 @@ selected_history_record = next(
 st.title("RAG Retrieval Evaluator")
 st.write(
     "Evaluate retrieved context against a golden dataset using contextual recall "
-    "and precision. Answer generation is intentionally not run."
+    "and precision, and evaluate generated answers for relevancy and faithfulness."
 )
 
 dataset_files = sorted(GOLDEN_DATASET_DIR.glob("*.json"))
@@ -255,7 +280,7 @@ if st.session_state.get("rag_evaluator_config_token") != config_token:
         else list(range(len(test_cases)))
     )
     st.session_state["rag_evaluator_chunking"] = retrieval_config.get(
-        "chunked_data_type", "fixed"
+        "chunked_data_type", "recursive"
     )
     st.session_state["rag_evaluator_rerank"] = retrieval_config.get(
         "rerank_flag", False
@@ -286,6 +311,16 @@ if st.session_state.get("rag_evaluator_config_token") != config_token:
         if active_history_record
         else True
     )
+    st.session_state["rag_evaluator_answer_relevancy"] = (
+        metric_thresholds.get("answer_relevancy") is not None
+        if active_history_record
+        else True
+    )
+    st.session_state["rag_evaluator_faithfulness"] = (
+        metric_thresholds.get("faithfulness") is not None
+        if active_history_record
+        else True
+    )
     st.session_state["rag_evaluator_recall_threshold"] = metric_thresholds.get("recall")
     if st.session_state["rag_evaluator_recall_threshold"] is None:
         st.session_state["rag_evaluator_recall_threshold"] = 0.7
@@ -294,13 +329,22 @@ if st.session_state.get("rag_evaluator_config_token") != config_token:
     )
     if st.session_state["rag_evaluator_precision_threshold"] is None:
         st.session_state["rag_evaluator_precision_threshold"] = 0.7
+    st.session_state["rag_evaluator_answer_relevancy_threshold"] = (
+        metric_thresholds.get("answer_relevancy")
+    )
+    if st.session_state["rag_evaluator_answer_relevancy_threshold"] is None:
+        st.session_state["rag_evaluator_answer_relevancy_threshold"] = 0.7
+    st.session_state["rag_evaluator_faithfulness_threshold"] = metric_thresholds.get(
+        "faithfulness"
+    )
+    if st.session_state["rag_evaluator_faithfulness_threshold"] is None:
+        st.session_state["rag_evaluator_faithfulness_threshold"] = 0.7
     st.session_state["rag_evaluator_config_token"] = config_token
     st.session_state.pop("rag_evaluator_reset_config", None)
 
 selected_case_indices = st.multiselect(
     "Test cases to evaluate",
     options=list(range(len(test_cases))),
-    default=list(range(len(test_cases))),
     key="rag_evaluator_cases",
     format_func=lambda index: (
         f"{index + 1}. {test_cases[index]['input'].strip()[:100]}"
@@ -313,7 +357,7 @@ st.subheader("Retriever configuration")
 settings_left, settings_right = st.columns(2)
 with settings_left:
     chunked_data_type = st.selectbox(
-        "Chunking strategy", ["fixed", "recursive"], key="rag_evaluator_chunking"
+        "Chunking strategy", ["recursive", "fixed"], key="rag_evaluator_chunking"
     )
     rerank_flag = st.checkbox("Rerank retrieved chunks", key="rag_evaluator_rerank")
     keyword_search_flag = st.checkbox(
@@ -356,8 +400,8 @@ with settings_right:
     )
 
 st.subheader("Evaluation metrics")
-metric_left, metric_right = st.columns(2)
-with metric_left:
+metric_columns = st.columns(4)
+with metric_columns[0]:
     evaluate_recall = st.checkbox("Contextual recall", key="rag_evaluator_recall")
     recall_threshold = st.slider(
         "Recall pass threshold",
@@ -367,7 +411,7 @@ with metric_left:
         step=0.05,
         key="rag_evaluator_recall_threshold",
     )
-with metric_right:
+with metric_columns[1]:
     evaluate_precision = st.checkbox(
         "Contextual precision", key="rag_evaluator_precision"
     )
@@ -379,19 +423,50 @@ with metric_right:
         step=0.05,
         key="rag_evaluator_precision_threshold",
     )
+with metric_columns[2]:
+    evaluate_answer_relevancy = st.checkbox(
+        "Answer relevancy", key="rag_evaluator_answer_relevancy"
+    )
+    answer_relevancy_threshold = st.slider(
+        "Answer relevancy pass threshold",
+        min_value=0.0,
+        max_value=1.0,
+        value=0.7,
+        step=0.05,
+        key="rag_evaluator_answer_relevancy_threshold",
+    )
+with metric_columns[3]:
+    evaluate_faithfulness = st.checkbox(
+        "Faithfulness", key="rag_evaluator_faithfulness"
+    )
+    faithfulness_threshold = st.slider(
+        "Faithfulness pass threshold",
+        min_value=0.0,
+        max_value=1.0,
+        value=0.7,
+        step=0.05,
+        key="rag_evaluator_faithfulness_threshold",
+    )
 
 evaluation_model = os.getenv("OPENAI_EVAL_MODEL", "")
 
-if not evaluate_recall and not evaluate_precision:
+enabled_metrics = (
+    evaluate_recall,
+    evaluate_precision,
+    evaluate_answer_relevancy,
+    evaluate_faithfulness,
+)
+if not any(enabled_metrics):
     st.warning("Select at least one evaluation metric.")
 
 run_evaluation = st.button(
     "Run retrieval evaluation",
     type="primary",
-    disabled=(not selected_case_indices or not (evaluate_recall or evaluate_precision)),
+    disabled=(not selected_case_indices or not any(enabled_metrics)),
 )
 
 if run_evaluation:
+    st.session_state.pop("rag_evaluator_hide_previous_results", None)
     results = []
     progress = st.progress(0)
     status = st.empty()
@@ -419,8 +494,11 @@ if run_evaluation:
                 "source_file": case.get("source_file", ""),
                 "retrieval_context": retrieval_context,
                 "retrieval_count": len(retrieval_context),
+                "answer": None,
                 "recall": None,
                 "precision": None,
+                "answer_relevancy": None,
+                "faithfulness": None,
                 "error": None,
             }
 
@@ -435,6 +513,14 @@ if run_evaluation:
                     retrieval_context=retrieval_context,
                 )
                 metric_errors = []
+                if evaluate_answer_relevancy or evaluate_faithfulness:
+                    try:
+                        result["answer"] = _generate_answer(
+                            case["input"], retrieval_context
+                        )
+                    except Exception as exc:
+                        metric_errors.append(f"Answer generation: {exc}")
+
                 if evaluate_recall:
                     try:
                         result["recall"] = _score_metric(
@@ -455,6 +541,32 @@ if run_evaluation:
                         )
                     except Exception as exc:
                         metric_errors.append(f"Precision: {exc}")
+                if result["answer"] is not None:
+                    answer_test_case = LLMTestCase(
+                        input=case["input"],
+                        actual_output=result["answer"],
+                        retrieval_context=retrieval_context,
+                    )
+                    if evaluate_answer_relevancy:
+                        try:
+                            result["answer_relevancy"] = _score_metric(
+                                AnswerRelevancyMetric,
+                                answer_relevancy_threshold,
+                                evaluation_model,
+                                answer_test_case,
+                            )
+                        except Exception as exc:
+                            metric_errors.append(f"Answer relevancy: {exc}")
+                    if evaluate_faithfulness:
+                        try:
+                            result["faithfulness"] = _score_metric(
+                                FaithfulnessMetric,
+                                faithfulness_threshold,
+                                evaluation_model,
+                                answer_test_case,
+                            )
+                        except Exception as exc:
+                            metric_errors.append(f"Faithfulness: {exc}")
                 if metric_errors:
                     result["error"] = "; ".join(metric_errors)
 
@@ -468,8 +580,11 @@ if run_evaluation:
                     "source_file": case.get("source_file", ""),
                     "retrieval_context": [],
                     "retrieval_count": 0,
+                    "answer": None,
                     "recall": None,
                     "precision": None,
+                    "answer_relevancy": None,
+                    "faithfulness": None,
                     "error": f"Retrieval failed: {exc}",
                 }
             )
@@ -490,6 +605,10 @@ if run_evaluation:
         "metric_thresholds": {
             "recall": recall_threshold if evaluate_recall else None,
             "precision": precision_threshold if evaluate_precision else None,
+            "answer_relevancy": (
+                answer_relevancy_threshold if evaluate_answer_relevancy else None
+            ),
+            "faithfulness": faithfulness_threshold if evaluate_faithfulness else None,
         },
         "evaluation_model": evaluation_model or None,
     }
@@ -517,7 +636,6 @@ if run_evaluation:
             """)
         st.session_state[HISTORY_KEY].insert(0, evaluation_record)
         st.session_state["rag_evaluation_history_db_available"] = True
-        st.session_state[HISTORY_SELECTION_KEY] = evaluation_id
     except Exception as exc:
         st.warning(f"Evaluation completed, but could not save it to PostgreSQL: {exc}")
     status.empty()
@@ -543,21 +661,25 @@ else:
         ),
         None,
     )
-    if latest_dataset_evaluation:
+    if latest_dataset_evaluation and not st.session_state.get(
+        "rag_evaluator_hide_previous_results", False
+    ):
         saved_evaluation = latest_dataset_evaluation["evaluation"]
-    else:
+    elif not st.session_state.get("rag_evaluator_hide_previous_results", False):
         saved_evaluation = st.session_state.get(RESULTS_KEY)
 
 if saved_evaluation:
     results = saved_evaluation["results"]
     st.divider()
     st.subheader("Evaluation results")
-    summary_columns = st.columns(2)
-    for metric_index, metric_name in enumerate(("recall", "precision")):
+    summary_columns = st.columns(4)
+    for metric_index, metric_name in enumerate(
+        ("recall", "precision", "answer_relevancy", "faithfulness")
+    ):
         scored = [
             result[metric_name]["score"]
             for result in results
-            if result[metric_name] is not None
+            if result.get(metric_name) is not None
         ]
         if scored:
             summary_columns[metric_index].metric(
@@ -574,15 +696,25 @@ if saved_evaluation:
                 "Retrieved chunks": result["retrieval_count"],
                 "Recall": (
                     f"{result['recall']['score']:.2f}"
-                    if result["recall"] is not None
+                    if result.get("recall") is not None
                     else "—"
                 ),
                 "Precision": (
                     f"{result['precision']['score']:.2f}"
-                    if result["precision"] is not None
+                    if result.get("precision") is not None
                     else "—"
                 ),
-                "Status": result["error"] or "Scored",
+                "Answer relevancy": (
+                    f"{result['answer_relevancy']['score']:.2f}"
+                    if result.get("answer_relevancy") is not None
+                    else "—"
+                ),
+                "Faithfulness": (
+                    f"{result['faithfulness']['score']:.2f}"
+                    if result.get("faithfulness") is not None
+                    else "—"
+                ),
+                "Status": result.get("error") or "Scored",
             }
         )
     st.dataframe(table_rows, use_container_width=True, hide_index=True)
@@ -591,6 +723,9 @@ if saved_evaluation:
         with st.expander(f"Case {result['case_number']}: {result['input']}"):
             st.markdown("**Expected answer (used as the retrieval reference)**")
             st.write(result["expected_output"])
+            if result.get("answer"):
+                st.markdown("**Generated answer**")
+                st.write(result["answer"])
             st.markdown("**Retrieved chunks**")
             if result["retrieval_context"]:
                 for chunk_number, chunk in enumerate(
@@ -600,15 +735,20 @@ if saved_evaluation:
                     st.write(chunk)
             else:
                 st.info("No chunks were returned.")
-            for metric_name in ("recall", "precision"):
-                metric_result = result[metric_name]
+            for metric_name in (
+                "recall",
+                "precision",
+                "answer_relevancy",
+                "faithfulness",
+            ):
+                metric_result = result.get(metric_name)
                 if metric_result is not None:
                     st.markdown(
                         f"**Contextual {metric_name}: {metric_result['score']:.2f} "
                         f"({'passed' if metric_result['passed'] else 'below threshold'})**"
                     )
                     st.write(metric_result["reason"])
-            if result["error"]:
+            if result.get("error"):
                 st.error(result["error"])
 
     st.download_button(
