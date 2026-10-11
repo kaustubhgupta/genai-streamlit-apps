@@ -209,7 +209,7 @@ selected_history_record = next(
     None,
 )
 
-st.title("RAG Retrieval Evaluator")
+st.title("RAG Querying Evaluator")
 st.write(
     "Evaluate retrieved context against a golden dataset using contextual recall "
     "and precision, and evaluate generated answers for relevancy and faithfulness."
@@ -453,7 +453,7 @@ if not any(enabled_metrics):
     st.warning("Select at least one evaluation metric.")
 
 run_evaluation = st.button(
-    "Run retrieval evaluation",
+    "Run evaluation",
     type="primary",
     disabled=(not selected_case_indices or not any(enabled_metrics)),
 )
