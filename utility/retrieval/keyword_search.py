@@ -5,7 +5,6 @@ from nltk.corpus import stopwords
 from nltk.stem import PorterStemmer
 from rank_bm25 import BM25Okapi
 
-nltk.download("stopwords")
 stemmer = PorterStemmer()
 stop_words = set(stopwords.words("english"))
 

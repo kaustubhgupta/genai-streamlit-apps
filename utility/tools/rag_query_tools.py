@@ -1,11 +1,11 @@
 from utility.embeddings.openai_embeddings import (
     generate_single_sentence_embeddings,
 )
-from utility.retrieval.keyword_search import keyword_search
 from utility.retrieval.vector_store import (
     fetch_similar_results,
     fetch_docs_for_keyword_search,
 )
+from utility.retrieval.jev_classifier import jev_scoring
 import os
 
 CHUNK_SIZE_FILTER_THRESHOLD = int(os.environ.get("CHUNK_SIZE_FILTER_THRESHOLD"))
@@ -17,8 +17,8 @@ RERANK_TOP_K = int(os.environ.get("RERANK_TOP_K"))
 def query_rag_documents(
     user_input,
     chunked_data_type,
-    rerank_flag,
-    keyword_search_flag,
+    rerank_strategy="strategy1",
+    keyword_search_flag=True,
     CHUNK_SIZE_FILTER_THRESHOLD=CHUNK_SIZE_FILTER_THRESHOLD,
     VECTOR_SEARCH_CHUNK_THRESHOLD=VECTOR_SEARCH_CHUNK_THRESHOLD,
     KEYWORD_SEARCH_CHUNK_THRESHOLD=KEYWORD_SEARCH_CHUNK_THRESHOLD,
@@ -27,7 +27,7 @@ def query_rag_documents(
     """Retrieve and assemble relevant RAG chunks for a user query on everything related to bootcamp content.
 
     This tool converts the input question into embeddings, searches the vector store
-    for the nearest chunks using the selected strategy, filters out chunks below a
+    for the nearest chunks using the chunked data strategy, filters out chunks below a
     configured length threshold, optionally reranks the remaining chunks, and returns
     a newline-delimited context string that includes per-chunk scores and source
     document names.
@@ -35,9 +35,8 @@ def query_rag_documents(
     Args:
         user_input (str): The natural-language question or instruction to answer.
         chunked_data_type (str): can take these 2 vales -> "fixed" or "recursive"
-        rerank_flag (bool): Whether to rerank the filtered chunk results before
-            returning them. Try with rerank_flag=False first, and if the results are not satisfactory, set rerank_flag=True.
-        keyword_search_flag (bool): Whether to include results from keyword-based search.
+        rerank_strategy (str, optional): can take these 2 vales -> "strategy1" or "strategy2", use "strategy1" as first option since it's a highly fast and accurate.
+        keyword_search_flag (bool, optional): Whether to include results from keyword-based search.
         CHUNK_SIZE_FILTER_THRESHOLD (int, optional): Minimum chunk length required for
             inclusion. Defaults to the module-level threshold.
         VECTOR_SEARCH_CHUNK_THRESHOLD (int, optional): Maximum number of candidate chunks
@@ -54,9 +53,8 @@ def query_rag_documents(
     Example:
         query_rag_documents(
             user_input="How an LLM is trained?",
-            chunked_data_type="recursive",
-            rerank_flag=True,
-        )
+            chunked_data_type="recursive"
+            )
     """
 
     user_input_embeddings = generate_single_sentence_embeddings(
@@ -83,9 +81,11 @@ def query_rag_documents(
         if len(document) > CHUNK_SIZE_FILTER_THRESHOLD
     ]
 
-    keyword_based_docs = []
+    keyword_based_docs_filtered = []
 
     if keyword_search_flag:
+        from utility.retrieval.keyword_search import keyword_search
+
         all_chunks = fetch_docs_for_keyword_search(strategy=chunked_data_type)
         all_docs = all_chunks["documents"][0]
         all_metadatas = all_chunks.get("metadatas", [[]])[0]
@@ -102,19 +102,26 @@ def query_rag_documents(
             all_docs, user_input, KEYWORD_SEARCH_CHUNK_THRESHOLD
         )
 
-    final_chunks_before_rank = list(
-        set(vector_filtered_similar_docs + keyword_based_docs)
+        keyword_based_docs_filtered = [
+            document
+            for document in keyword_based_docs
+            if len(document) > CHUNK_SIZE_FILTER_THRESHOLD
+        ]
+
+    final_chunks_before_scoring = list(
+        set(vector_filtered_similar_docs + keyword_based_docs_filtered)
     )
 
-    if rerank_flag:
+    scored_docs = []
+
+    if rerank_strategy == "strategy2":
         from utility.retrieval.reranker import rerank_docs
 
-        final_docs = rerank_docs(user_input, final_chunks_before_rank, RERANK_TOP_K)
-    else:
-        final_docs = [
-            {"document": document, "score": "NA"}
-            for document in final_chunks_before_rank
-        ]
+        scored_docs = rerank_docs(user_input, final_chunks_before_scoring, RERANK_TOP_K)
+    elif rerank_strategy == "strategy1":
+        scored_docs = jev_scoring(user_input, final_chunks_before_scoring, RERANK_TOP_K)
+
+    final_docs = scored_docs
 
     final_additional_context = ""
     for doc in final_docs:
@@ -122,7 +129,7 @@ def query_rag_documents(
             sorted(document_names.get(doc["document"], {"Unknown document"}))
         )
         final_additional_context += (
-            f"Chunk Score {doc['score'] if rerank_flag else 'NA since it is not ranked'} (Document: {sources}): "
+            f"Chunk Score -> {doc['score']} Document Sources -> {sources}: \n"
             f"{doc['document']}\n"
         )
 
@@ -145,9 +152,9 @@ RAG_QUERY_TOOLS = [
                     "type": "string",
                     "description": "can take these 2 vales -> 'fixed' or 'recursive'",
                 },
-                "rerank_flag": {
-                    "type": "boolean",
-                    "description": "Whether to rerank the filtered chunk results before returning them. Try with rerank_flag=False first, and if the results are not satisfactory, set rerank_flag=True",
+                "rerank_strategy": {
+                    "type": "string",
+                    "description": "can take these 2 vales -> 'strategy1' or 'strategy2'",
                 },
                 "keyword_search_flag": {
                     "type": "boolean",
@@ -173,8 +180,6 @@ RAG_QUERY_TOOLS = [
             "required": [
                 "user_input",
                 "chunked_data_type",
-                "rerank_flag",
-                "keyword_search_flag",
             ],
         },
     }

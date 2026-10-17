@@ -158,6 +158,7 @@ user_input = st.chat_input("Ask a question or follow up...")
 if user_input:
 
     try:
+        query_start = datetime.now()
         with st.spinner("Working on user request..."):
 
             prompt = f"User Question: {user_input}\n\nPlease provide an answer in 250 words and if needed, search for relevant chunks. Look at the chunk scores and decide which chunks to use. At the end, list the document names (doc_name) for the sources you actually used under 'Documents used'. If the answer is not found in the provided chunks, respond with 'I don't know.'"
@@ -210,6 +211,10 @@ if user_input:
                 response_id = response.id
 
             output = response.output_text.strip()
+
+            query_end = datetime.now()
+            time_taken = query_end - query_start
+            output += f"\n\nQuery Time: {time_taken}"
 
             st.session_state.bootcamp_chat_messages.extend(
                 [
