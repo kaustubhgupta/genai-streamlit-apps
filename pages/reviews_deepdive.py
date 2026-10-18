@@ -337,12 +337,11 @@ if display_record:
 
             matching_reviews = [
                 {
-                    "Review ID": review.get("review_id"),
-                    "Person": review_metadata.get(str(review.get("review_id")), {}).get(
-                        "person"
-                    ),
                     "Date": review_metadata.get(str(review.get("review_id")), {}).get(
                         "date"
+                    ),
+                    "Person": review_metadata.get(str(review.get("review_id")), {}).get(
+                        "person"
                     ),
                     "Review": review.get("review"),
                     "Satisfaction score (0-5)": review.get(criterion),
