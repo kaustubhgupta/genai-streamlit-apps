@@ -1,22 +1,45 @@
+from datetime import datetime
+
 import streamlit as st
 
 
-def render_history_selector(history, selection_key, label, empty_message):
-    """Render the common reverse-chronological selector used by history sidebars."""
+def format_history_timestamp(timestamp):
+    """Format database or serialized timestamps consistently for history labels."""
+    if isinstance(timestamp, datetime):
+        return timestamp.astimezone().strftime("%Y-%m-%d %H:%M")
+    return str(timestamp).replace("T", " ")[:16]
+
+
+def render_history_selector(
+    history,
+    selection_key,
+    label,
+    empty_message,
+    item_id_key="id",
+    format_func=None,
+    reverse=True,
+):
+    """Render a reusable history selector and return its selected record ID."""
     if not history:
         st.caption(empty_message)
-        return
+        return None
 
-    history_items = list(reversed(history))
+    history_items = list(reversed(history)) if reverse else list(history)
     with st.container(height=250, border=False):
-        st.radio(
+        return st.radio(
             label,
-            [item["id"] for item in history_items],
+            [item[item_id_key] for item in history_items],
             index=None,
-            format_func=lambda item_id: next(
-                f'{item["timestamp"]:%Y-%m-%d %H:%M} — {item["question"]}'
-                for item in history_items
-                if item["id"] == item_id
+            format_func=lambda item_id: (
+                format_func(
+                    next(item for item in history_items if item[item_id_key] == item_id)
+                )
+                if format_func
+                else next(
+                    f'{item["timestamp"]:%Y-%m-%d %H:%M} — {item["question"]}'
+                    for item in history_items
+                    if item[item_id_key] == item_id
+                )
             ),
             key=selection_key,
         )

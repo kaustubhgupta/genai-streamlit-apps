@@ -16,3 +16,4 @@ langchain_community
 tiktoken
 typesafe_sdk
 pandas 
+playwright

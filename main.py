@@ -13,12 +13,13 @@ def master_page():
         "This homepage provides access to the applications built during the "
         "GenAI Bootcamp. Use the sidebar on the left to explore the available "
         "apps.\n\n"
-        "0. **Ingestion Manager** — Ingest data from PDF and text files. The application supports ingesting documents in fixed and recursive chunking strategies along with option to de ingest.\n"
+        "0. **Ingestion Manager** — Ingest PDF and text documents, de-ingest documents, generate golden datasets, and scrape NamasteSQL course reviews. Re-ingesting an existing course requires confirmation because its stored reviews will be replaced.\n"
         "1. **Database Querying** — Select a schema and tables, ask a question in plain English, generate a validated read-only SQL query, and view the results.\n"
         "2. **Data Chat** — Select data sources and chat with your data. The application generates and executes read-only SQL when needed, while supporting follow-up questions and chat history.\n"
         "3. **Database Assistant** — Ask database questions conversationally. The assistant can call database tools to inspect schemas and retrieve results, with support for follow-up conversations and saved chats.\n"
         "4. **Bootcamp Assistant** — Ask questions about the GenAI Bootcamp and receive answers based on the bootcamp content. The assistant can provide follow-up answers and save chat history.\n"
         "5. **RAG Evaluator** — Evaluate retrieved context against golden datasets using contextual recall and precision, with configurable retrieval settings.\n"
+        "6. **Course Reviews Deep Dive** — Evaluate ingested course reviews across satisfaction criteria, compare overall and criterion-level scores, inspect matching reviews, and browse saved PostgreSQL evaluation history.\n"
     )
 
 
@@ -29,6 +30,7 @@ PAGE_NAMES = {
     "database_assisstant.py": "3. Database Assistant",
     "bootcamp_assistant.py": "4. Bootcamp Assistant",
     "rag_evaluator.py": "5. RAG Evaluator",
+    "reviews_deepdive.py": "6. Course Reviews Deep Dive",
 }
 
 PAGE_ORDER = [
@@ -38,6 +40,7 @@ PAGE_ORDER = [
     "database_assisstant.py",
     "bootcamp_assistant.py",
     "rag_evaluator.py",
+    "reviews_deepdive.py",
 ]
 
 pages_dir = Path(__file__).parent / "pages"

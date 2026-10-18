@@ -12,6 +12,8 @@ from utility.ingestion.rag_ingestion import (
     list_ingested_documents,
 )
 from utility.evaluation.golden_dataset_generation import generate_golden_dataset
+from utility.ingestion.course_reviews import list_ingested_courses
+from utility.ingestion.reviews_scrape import scrape_reviews
 
 st.set_page_config(
     page_title="Ingestion Manager", page_icon=":file_folder:", layout="wide"
@@ -50,8 +52,8 @@ available_names = {
 ingested_names = sorted(ingested_names)
 available_names = sorted(available_names)
 
-st.title("Documents Ingestion Manager")
-st.write(f"Ingest documents from `{materials_folder}` into the database.")
+st.title("Ingestion Manager")
+st.write(f"Ingest documents from different sources into the database.")
 
 if st.session_state.pop("show_ingested_documents", False):
     st.session_state["ingestion_manager_tabs"] = "Currently ingested documents"
@@ -62,17 +64,27 @@ if st.session_state.pop("show_deingested_documents", False):
 if st.session_state.pop("show_generated_golden_datasets", False):
     st.session_state["ingestion_manager_tabs"] = "Generate golden dataset"
     st.toast("Golden dataset generation completed.")
+if st.session_state.pop("show_ingested_course_reviews", False):
+    st.session_state["ingestion_manager_tabs"] = "Course reviews"
+    st.toast("Course review ingestion completed.")
 
 new_sources = set(available_names) - set(ingested_names)
 if new_sources:
     st.warning(f"New sources available to ingest!")
 
-ingested_tab, add_documents_tab, remove_documents_tab, golden_dataset_tab = st.tabs(
+(
+    ingested_tab,
+    add_documents_tab,
+    remove_documents_tab,
+    golden_dataset_tab,
+    course_reviews_tab,
+) = st.tabs(
     [
         "Currently ingested documents",
         "Add documents",
         "De-ingest documents",
         "Generate golden dataset",
+        "Course reviews",
     ],
     key="ingestion_manager_tabs",
     on_change="rerun",
@@ -330,3 +342,79 @@ with golden_dataset_tab:
                     st.rerun()
             except Exception as exc:
                 st.error(f"Could not generate golden datasets: {exc}")
+
+with course_reviews_tab:
+    st.subheader("Ingest course reviews")
+    st.write("Add a NamasteSQL course link to scrape and store its course reviews.")
+
+    try:
+        course_records = list_ingested_courses()
+        ingested_course_links = {course["link"] for course in course_records}
+        ingested_courses = [
+            {
+                "Course": course["name"],
+                "Course link": course["link"],
+                "Reviews": course["review_count"],
+            }
+            for course in course_records
+        ]
+        course_list_loaded = True
+    except Exception as exc:
+        st.error(f"Could not load ingested courses: {exc}")
+        ingested_courses = []
+        ingested_course_links = set()
+        course_list_loaded = False
+
+    course_link = st.text_input(
+        "Course link",
+        placeholder="https://www.namastesql.com/course-detail/...",
+        key="course_review_link",
+    ).strip()
+    pending_reingest_link = st.session_state.get("pending_course_review_reingest")
+    if pending_reingest_link:
+        st.warning(
+            f"This course is already ingested: {pending_reingest_link}. "
+            "Re-ingesting will replace its stored reviews. Do you want to continue?"
+        )
+        confirm_column, cancel_column = st.columns(2)
+        with confirm_column:
+            if st.button(
+                "Yes, re-ingest course reviews",
+                type="primary",
+                key="confirm_course_review_reingest",
+            ):
+                try:
+                    with st.spinner("Scraping and re-ingesting course reviews..."):
+                        scrape_reviews(pending_reingest_link)
+                    st.session_state.pop("pending_course_review_reingest", None)
+                    st.session_state["show_ingested_course_reviews"] = True
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"Could not re-ingest course reviews: {exc}")
+        with cancel_column:
+            if st.button("Cancel", key="cancel_course_review_reingest"):
+                st.session_state.pop("pending_course_review_reingest", None)
+                st.rerun()
+    elif st.button(
+        "Ingest course reviews",
+        type="primary",
+        disabled=not course_link or not course_list_loaded,
+        key="ingest_course_reviews",
+    ):
+        if course_link in ingested_course_links:
+            st.session_state["pending_course_review_reingest"] = course_link
+            st.rerun()
+        else:
+            try:
+                with st.spinner("Scraping and ingesting course reviews..."):
+                    scrape_reviews(course_link)
+                st.session_state["show_ingested_course_reviews"] = True
+                st.rerun()
+            except Exception as exc:
+                st.error(f"Could not ingest course reviews: {exc}")
+
+    st.subheader("Currently ingested courses")
+    if ingested_courses:
+        st.dataframe(ingested_courses, use_container_width=True)
+    elif course_list_loaded:
+        st.info("No course reviews have been ingested yet.")

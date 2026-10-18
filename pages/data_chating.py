@@ -1,16 +1,14 @@
 import streamlit as st
 import os
-import json
 import uuid
 from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
 from utility.tools.pg_tools import direct_db_access, fetch_schema, load_schema_tables
+from utility.database.history import load_history_records, save_history_record
 from utility.database.sql_utilities import (
     contains_forbidden_sql_operation,
-    decode_json_value,
     filter_excluded_schemas,
-    sql_literal,
 )
 from utility.ui.page_utilities import (
     render_chat_messages,
@@ -27,40 +25,25 @@ if "chat_messages" not in st.session_state:
     st.session_state.chat_messages = []
 if "chat_history" not in st.session_state:
     try:
-        direct_db_access("CREATE SCHEMA IF NOT EXISTS data_chat_assistant")
-        direct_db_access("""
-            CREATE TABLE IF NOT EXISTS data_chat_assistant.data_chat_history (
-                id TEXT PRIMARY KEY,
-                timestamp TIMESTAMPTZ NOT NULL,
-                question TEXT NOT NULL,
-                selected_schema TEXT NOT NULL,
-                selected_tables JSONB NOT NULL,
-                messages JSONB NOT NULL
-            )
-            """)
-        _, stored_chats = direct_db_access("""
-            SELECT id, timestamp, question, selected_schema, selected_tables, messages
-            FROM data_chat_assistant.data_chat_history
-            ORDER BY timestamp
-            """)
-        st.session_state.chat_history = [
+        history_records = load_history_records(
+            "data_chat_assistant",
+            "data_chat_history",
             {
-                "id": chat_id,
-                "timestamp": timestamp,
-                "question": question,
-                "schema": selected_schema,
-                "tables": decode_json_value(selected_tables),
-                "messages": decode_json_value(messages),
-            }
-            for (
-                chat_id,
-                timestamp,
-                question,
-                selected_schema,
-                selected_tables,
-                messages,
-            ) in (stored_chats or [])
-        ]
+                "id": "TEXT",
+                "timestamp": "TIMESTAMPTZ",
+                "question": "TEXT",
+                "selected_schema": "TEXT",
+                "selected_tables": "JSONB",
+                "messages": "JSONB",
+            },
+            order_by="timestamp",
+            descending=False,
+        )
+        st.session_state.chat_history = []
+        for item in history_records:
+            item["schema"] = item.pop("selected_schema")
+            item["tables"] = item.pop("selected_tables")
+            st.session_state.chat_history.append(item)
     except Exception as exc:
         st.session_state.chat_history = []
         st.warning(f"Could not load chat history from PostgreSQL: {exc}")
@@ -169,24 +152,27 @@ def save_chat_history(question):
         dict(message) for message in st.session_state.chat_messages
     ]
 
-    tables_json = json.dumps(history_item["tables"])
-    messages_json = json.dumps(st.session_state.chat_messages, default=str)
-    direct_db_access(f"""
-        INSERT INTO data_chat_assistant.data_chat_history
-            (id, timestamp, question, selected_schema, selected_tables, messages)
-        VALUES (
-            {sql_literal(chat_id)},
-            {sql_literal(history_item['timestamp'].isoformat())}::timestamptz,
-            {sql_literal(history_item['question'])},
-            {sql_literal(history_item['schema'])},
-            {sql_literal(tables_json)}::jsonb,
-            {sql_literal(messages_json)}::jsonb
-        )
-        ON CONFLICT (id) DO UPDATE SET
-            selected_schema = EXCLUDED.selected_schema,
-            selected_tables = EXCLUDED.selected_tables,
-            messages = EXCLUDED.messages
-        """)
+    save_history_record(
+        "data_chat_assistant",
+        "data_chat_history",
+        {
+            "id": "TEXT",
+            "timestamp": "TIMESTAMPTZ",
+            "question": "TEXT",
+            "selected_schema": "TEXT",
+            "selected_tables": "JSONB",
+            "messages": "JSONB",
+        },
+        {
+            "id": chat_id,
+            "timestamp": history_item["timestamp"],
+            "question": history_item["question"],
+            "selected_schema": history_item["schema"],
+            "selected_tables": history_item["tables"],
+            "messages": st.session_state.chat_messages,
+        },
+        update_columns=("selected_schema", "selected_tables", "messages"),
+    )
 
 
 user_input = st.chat_input("Ask a question or follow up...")

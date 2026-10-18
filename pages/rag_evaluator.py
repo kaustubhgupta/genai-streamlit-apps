@@ -19,8 +19,12 @@ from openai import OpenAI
 load_dotenv()
 
 from utility.tools.rag_query_tools import query_rag_documents
-from utility.tools.pg_tools import direct_db_access
-from utility.database.sql_utilities import decode_json_value, sql_literal
+from utility.database.history import load_history_records, save_history_record
+from utility.database.json_utilities import remove_null_characters
+from utility.ui.page_utilities import (
+    format_history_timestamp,
+    render_history_selector,
+)
 
 st.set_page_config(page_title="RAG Evaluator", page_icon=":bar_chart:", layout="wide")
 
@@ -116,44 +120,24 @@ def _generate_answer(user_input, retrieval_context):
     return response.output_text.strip()
 
 
-def _remove_null_characters(value):
-    if isinstance(value, str):
-        # PostgreSQL JSONB rejects both NUL characters and JSON's escaped NUL.
-        return re.sub(r"\\u0000", "", value.replace("\x00", ""), flags=re.IGNORECASE)
-    if isinstance(value, list):
-        return [_remove_null_characters(item) for item in value]
-    if isinstance(value, dict):
-        return {
-            _remove_null_characters(key): _remove_null_characters(item)
-            for key, item in value.items()
-        }
-    return value
-
-
 def _load_evaluation_history():
-    direct_db_access("CREATE SCHEMA IF NOT EXISTS rag_evaluator")
-    direct_db_access("""
-        CREATE TABLE IF NOT EXISTS rag_evaluator.evaluation_history (
-            evaluation_id TEXT PRIMARY KEY,
-            created_at TIMESTAMPTZ NOT NULL,
-            dataset TEXT NOT NULL,
-            evaluation JSONB NOT NULL
-        )
-        """)
-    _, rows = direct_db_access("""
-        SELECT evaluation_id, created_at, dataset, evaluation
-        FROM rag_evaluator.evaluation_history
-        ORDER BY created_at DESC
-        """)
-    return [
+    return load_history_records(
+        "rag_evaluator",
+        "evaluation_history",
         {
-            "evaluation_id": evaluation_id,
-            "created_at": created_at,
-            "dataset": dataset,
-            "evaluation": decode_json_value(evaluation),
-        }
-        for evaluation_id, created_at, dataset, evaluation in (rows or [])
-    ]
+            "evaluation_id": "TEXT",
+            "created_at": "TIMESTAMPTZ",
+            "dataset": "TEXT",
+            "evaluation": "JSONB",
+        },
+        order_by="created_at",
+        primary_key="evaluation_id",
+    )
+
+
+def _evaluation_history_label(record):
+    timestamp = format_history_timestamp(record["created_at"])
+    return f"{record['dataset']} — {timestamp}"
 
 
 if HISTORY_KEY not in st.session_state:
@@ -176,30 +160,15 @@ with st.sidebar:
         st.session_state["rag_evaluator_hide_previous_results"] = True
         st.session_state.pop(RESULTS_KEY, None)
         st.session_state.pop("rag_evaluator_config_token", None)
-    with st.container(height=300, border=False):
-        history = st.session_state[HISTORY_KEY]
-        if history:
-            history_ids = [item["evaluation_id"] for item in history]
-            selected_history_id = st.radio(
-                "Previous evaluations",
-                options=history_ids,
-                index=None,
-                key=HISTORY_SELECTION_KEY,
-                format_func=lambda evaluation_id: (
-                    next(
-                        (
-                            f"{item['dataset']} — {item['created_at']:%Y-%m-%d %H:%M}"
-                            if isinstance(item["created_at"], datetime)
-                            else f"{item['dataset']} — {str(item['created_at'])[:16]}"
-                        )
-                        for item in history
-                        if item["evaluation_id"] == evaluation_id
-                    )
-                ),
-            )
-        else:
-            selected_history_id = None
-            st.caption("No saved evaluations yet.")
+    selected_history_id = render_history_selector(
+        st.session_state[HISTORY_KEY],
+        HISTORY_SELECTION_KEY,
+        "Previous evaluations",
+        "No saved evaluations yet.",
+        item_id_key="evaluation_id",
+        format_func=_evaluation_history_label,
+        reverse=False,
+    )
 
 selected_history_record = next(
     (
@@ -619,7 +588,7 @@ if run_evaluation:
         },
         "evaluation_model": evaluation_model or None,
     }
-    st.session_state[RESULTS_KEY] = _remove_null_characters(
+    st.session_state[RESULTS_KEY] = remove_null_characters(
         st.session_state[RESULTS_KEY]
     )
     evaluation_id = str(uuid.uuid4())
@@ -631,16 +600,23 @@ if run_evaluation:
         "evaluation": st.session_state[RESULTS_KEY],
     }
     try:
-        direct_db_access(f"""
-            INSERT INTO rag_evaluator.evaluation_history
-                (evaluation_id, created_at, dataset, evaluation)
-            VALUES (
-                {sql_literal(evaluation_id)},
-                {sql_literal(created_at.isoformat())}::timestamptz,
-                {sql_literal(dataset_source)},
-                {sql_literal(json.dumps(st.session_state[RESULTS_KEY], ensure_ascii=False))}::jsonb
-            )
-            """)
+        save_history_record(
+            "rag_evaluator",
+            "evaluation_history",
+            {
+                "evaluation_id": "TEXT",
+                "created_at": "TIMESTAMPTZ",
+                "dataset": "TEXT",
+                "evaluation": "JSONB",
+            },
+            {
+                "evaluation_id": evaluation_id,
+                "created_at": created_at,
+                "dataset": dataset_source,
+                "evaluation": st.session_state[RESULTS_KEY],
+            },
+            primary_key="evaluation_id",
+        )
         st.session_state[HISTORY_KEY].insert(0, evaluation_record)
         st.session_state["rag_evaluation_history_db_available"] = True
     except Exception as exc:

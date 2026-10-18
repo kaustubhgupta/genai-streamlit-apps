@@ -1,13 +1,12 @@
 import streamlit as st
 import os
-import json
 import uuid
 from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
 from utility.tools.rag_query_tools import RAG_QUERY_TOOLS, RAG_TOOLS_MAPPING
-from utility.tools.pg_tools import direct_db_access
-from utility.database.sql_utilities import decode_json_value, sql_literal
+from utility.database.history import load_history_records, save_history_record
+from utility.database.sql_utilities import decode_json_value
 from utility.tools.response_tool_utilities import normalize_response_tool
 from utility.ui.page_utilities import render_chat_messages, render_history_selector
 
@@ -27,33 +26,20 @@ if "bootcamp_chat_messages" not in st.session_state:
     st.session_state.bootcamp_chat_messages = []
 if "bootcamp_chat_history" not in st.session_state:
     try:
-        direct_db_access("CREATE SCHEMA IF NOT EXISTS bootcamp_assistant")
-        direct_db_access("""
-            CREATE TABLE IF NOT EXISTS bootcamp_assistant.bootcamp_chat_history (
-                id TEXT PRIMARY KEY,
-                timestamp TIMESTAMPTZ NOT NULL,
-                question TEXT NOT NULL,
-                messages JSONB NOT NULL,
-                response_id TEXT
-            )
-            """)
-        _, stored_chats = direct_db_access("""
-            SELECT id, timestamp, question, messages, response_id
-            FROM bootcamp_assistant.bootcamp_chat_history
-            ORDER BY timestamp
-            """)
-        st.session_state.bootcamp_chat_history = [
+        st.session_state.bootcamp_chat_history = load_history_records(
+            "bootcamp_assistant",
+            "bootcamp_chat_history",
             {
-                "id": chat_id,
-                "timestamp": timestamp,
-                "question": question,
-                "messages": decode_json_value(messages),
-                "response_id": response_id,
-            }
-            for chat_id, timestamp, question, messages, response_id in (
-                stored_chats or []
-            )
-        ]
+                "id": "TEXT",
+                "timestamp": "TIMESTAMPTZ",
+                "question": "TEXT",
+                "messages": "JSONB",
+                "response_id": "TEXT",
+            },
+            order_by="timestamp",
+            descending=False,
+            nullable_columns=("response_id",),
+        )
     except Exception as exc:
         st.session_state.bootcamp_chat_history = []
         st.warning(f"Could not load chat history from PostgreSQL: {exc}")
@@ -135,21 +121,26 @@ def save_chat_history(question, response_id):
     history_item["response_id"] = response_id
     st.session_state.bootcamp_last_response_id = response_id
 
-    messages_json = json.dumps(st.session_state.bootcamp_chat_messages)
-    direct_db_access(f"""
-        INSERT INTO bootcamp_assistant.bootcamp_chat_history
-            (id, timestamp, question, messages, response_id)
-        VALUES (
-            {sql_literal(chat_id)},
-            {sql_literal(history_item['timestamp'].isoformat())}::timestamptz,
-            {sql_literal(history_item['question'])},
-            {sql_literal(messages_json)}::jsonb,
-            {sql_literal(response_id)}
-        )
-        ON CONFLICT (id) DO UPDATE SET
-            messages = EXCLUDED.messages,
-            response_id = EXCLUDED.response_id
-        """)
+    save_history_record(
+        "bootcamp_assistant",
+        "bootcamp_chat_history",
+        {
+            "id": "TEXT",
+            "timestamp": "TIMESTAMPTZ",
+            "question": "TEXT",
+            "messages": "JSONB",
+            "response_id": "TEXT",
+        },
+        {
+            "id": chat_id,
+            "timestamp": history_item["timestamp"],
+            "question": history_item["question"],
+            "messages": st.session_state.bootcamp_chat_messages,
+            "response_id": response_id,
+        },
+        update_columns=("messages", "response_id"),
+        nullable_columns=("response_id",),
+    )
 
 
 user_input = st.chat_input("Ask a question or follow up...")

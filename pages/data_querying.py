@@ -1,16 +1,14 @@
 import streamlit as st
 import os
-import json
 import uuid
 from datetime import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
 from utility.tools.pg_tools import direct_db_access, fetch_schema, load_schema_tables
+from utility.database.history import load_history_records, save_history_record
 from utility.database.sql_utilities import (
     StrictSQLQuery,
-    decode_json_value,
     filter_excluded_schemas,
-    sql_literal,
 )
 from utility.ui.page_utilities import render_history_selector
 
@@ -23,49 +21,31 @@ st.title("Database Querying")
 
 if "question_history" not in st.session_state:
     try:
-        direct_db_access("CREATE SCHEMA IF NOT EXISTS data_quering_assistant")
-        direct_db_access("""
-            CREATE TABLE IF NOT EXISTS data_quering_assistant.question_history (
-                id TEXT PRIMARY KEY,
-                timestamp TIMESTAMPTZ NOT NULL,
-                question TEXT NOT NULL,
-                selected_schema TEXT NOT NULL,
-                selected_tables JSONB NOT NULL,
-                generated_query TEXT NOT NULL,
-                operation_type TEXT NOT NULL,
-                result JSONB
-            )
-            """)
-        _, stored_questions = direct_db_access("""
-            SELECT id, timestamp, question, selected_schema, selected_tables,
-                   generated_query, operation_type, result
-            FROM data_quering_assistant.question_history
-            ORDER BY timestamp
-            """)
-        st.session_state.question_history = [
+        history_records = load_history_records(
+            "data_quering_assistant",
+            "question_history",
             {
-                "id": history_id,
-                "timestamp": timestamp,
-                "question": question,
-                "schema": selected_schema,
-                "tables": decode_json_value(selected_tables),
-                "query": generated_query,
-                "operation_type": operation_type,
-                "result": (
-                    tuple(decode_json_value(result)) if result is not None else None
-                ),
-            }
-            for (
-                history_id,
-                timestamp,
-                question,
-                selected_schema,
-                selected_tables,
-                generated_query,
-                operation_type,
-                result,
-            ) in (stored_questions or [])
-        ]
+                "id": "TEXT",
+                "timestamp": "TIMESTAMPTZ",
+                "question": "TEXT",
+                "selected_schema": "TEXT",
+                "selected_tables": "JSONB",
+                "generated_query": "TEXT",
+                "operation_type": "TEXT",
+                "result": "JSONB",
+            },
+            order_by="timestamp",
+            descending=False,
+            nullable_columns=("result",),
+        )
+        st.session_state.question_history = []
+        for item in history_records:
+            item["schema"] = item.pop("selected_schema")
+            item["tables"] = item.pop("selected_tables")
+            item["query"] = item.pop("generated_query")
+            result = item.get("result")
+            item["result"] = tuple(result) if result is not None else None
+            st.session_state.question_history.append(item)
     except Exception as exc:
         st.session_state.question_history = []
         st.warning(f"Could not load question history from PostgreSQL: {exc}")
@@ -143,30 +123,38 @@ with st.sidebar:
 
 
 def save_question_history(history_item):
-    tables_json = json.dumps(history_item["tables"])
-    result = history_item.get("result")
-    result_json = json.dumps(result, default=str) if result is not None else None
-    direct_db_access(f"""
-        INSERT INTO data_quering_assistant.question_history
-            (id, timestamp, question, selected_schema, selected_tables,
-             generated_query, operation_type, result)
-        VALUES (
-            {sql_literal(history_item['id'])},
-            {sql_literal(history_item['timestamp'].isoformat())}::timestamptz,
-            {sql_literal(history_item['question'])},
-            {sql_literal(history_item['schema'])},
-            {sql_literal(tables_json)}::jsonb,
-            {sql_literal(history_item['query'])},
-            {sql_literal(history_item['operation_type'])},
-            {sql_literal(result_json)}::jsonb
-        )
-        ON CONFLICT (id) DO UPDATE SET
-            selected_schema = EXCLUDED.selected_schema,
-            selected_tables = EXCLUDED.selected_tables,
-            generated_query = EXCLUDED.generated_query,
-            operation_type = EXCLUDED.operation_type,
-            result = EXCLUDED.result
-        """)
+    save_history_record(
+        "data_quering_assistant",
+        "question_history",
+        {
+            "id": "TEXT",
+            "timestamp": "TIMESTAMPTZ",
+            "question": "TEXT",
+            "selected_schema": "TEXT",
+            "selected_tables": "JSONB",
+            "generated_query": "TEXT",
+            "operation_type": "TEXT",
+            "result": "JSONB",
+        },
+        {
+            "id": history_item["id"],
+            "timestamp": history_item["timestamp"],
+            "question": history_item["question"],
+            "selected_schema": history_item["schema"],
+            "selected_tables": history_item["tables"],
+            "generated_query": history_item["query"],
+            "operation_type": history_item["operation_type"],
+            "result": history_item.get("result"),
+        },
+        update_columns=(
+            "selected_schema",
+            "selected_tables",
+            "generated_query",
+            "operation_type",
+            "result",
+        ),
+        nullable_columns=("result",),
+    )
 
 
 user_input = st.text_input("Ask your question:", key="user_input")
