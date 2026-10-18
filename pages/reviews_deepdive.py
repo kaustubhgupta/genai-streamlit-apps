@@ -28,6 +28,7 @@ EVALUATION_SCHEMA = "course_reviews_evaluation"
 HISTORY_KEY = "course_reviews_evaluation_history"
 HISTORY_SELECTION_KEY = "course_reviews_evaluation_history_selection"
 LATEST_EVALUATION_KEY = "course_reviews_latest_evaluation"
+CLEAR_RESULTS_KEY = "reviews_deepdive_results_cleared"
 
 CRITERION_LABELS = {
     "curriculum": "Curriculum",
@@ -129,6 +130,10 @@ def _history_label(record):
     return f"{record['course_name']} — {timestamp}"
 
 
+first_page_load = CLEAR_RESULTS_KEY not in st.session_state
+if first_page_load:
+    st.session_state[CLEAR_RESULTS_KEY] = True
+
 if HISTORY_KEY not in st.session_state:
     try:
         st.session_state[HISTORY_KEY] = _load_evaluation_history()
@@ -140,6 +145,15 @@ if HISTORY_KEY not in st.session_state:
 
 with st.sidebar:
     st.subheader("Evaluation history")
+    if st.button("Clear results", key="reviews_deepdive_clear"):
+        st.session_state.pop(LATEST_EVALUATION_KEY, None)
+        st.session_state.pop("reviews_deepdive_selected_criterion", None)
+        st.session_state[HISTORY_SELECTION_KEY] = None
+        st.session_state[CLEAR_RESULTS_KEY] = True
+        st.session_state["reviews_deepdive_history_course_selection"] = None
+        st.session_state["reviews_deepdive_course"] = None
+        st.rerun()
+
     history = st.session_state[HISTORY_KEY]
     if history:
         selected_history_id = render_history_selector(
@@ -163,6 +177,8 @@ selected_history_record = next(
     ),
     None,
 )
+if selected_history_record and not first_page_load:
+    st.session_state[CLEAR_RESULTS_KEY] = False
 
 st.title("Course Reviews Deep Dive")
 st.write(
@@ -179,24 +195,45 @@ except Exception as exc:
 courses_by_id = {course["id"]: course for course in courses}
 new_evaluation_record = None
 
+if (
+    selected_history_record
+    and selected_history_record["course_id"] in courses_by_id
+    and selected_history_id
+    != st.session_state.get("reviews_deepdive_history_course_selection")
+):
+    st.session_state["reviews_deepdive_course"] = selected_history_record["course_id"]
+    st.session_state["reviews_deepdive_history_course_selection"] = selected_history_id
+elif selected_history_id is None:
+    st.session_state["reviews_deepdive_history_course_selection"] = None
+
 if courses:
+    course_options = list(courses_by_id)
+    if "reviews_deepdive_course" not in st.session_state:
+        st.session_state["reviews_deepdive_course"] = None
+
     selected_course_id = st.selectbox(
         "Select a course",
-        options=list(courses_by_id),
+        options=course_options,
+        index=None,
+        placeholder="Choose a course",
         format_func=lambda course_id: (
             f"{courses_by_id[course_id]['name']} "
             f"({courses_by_id[course_id]['review_count']} reviews)"
         ),
         key="reviews_deepdive_course",
     )
-    selected_course = courses_by_id[selected_course_id]
+    selected_course = courses_by_id.get(selected_course_id)
 
-    with st.expander("Course details"):
-        st.write(f"**Course:** {selected_course['name']}")
-        st.write(f"**Course link:** {selected_course['link']}")
-        st.write(f"**Reviews:** {selected_course['review_count']}")
+    if selected_course:
+        with st.expander("Course details"):
+            st.write(f"**Course:** {selected_course['name']}")
+            st.write(f"**Course link:** {selected_course['link']}")
+            st.write(f"**Reviews:** {selected_course['review_count']}")
 
-    if st.button("Start analysis", type="primary", key="reviews_deepdive_start"):
+    if selected_course and st.button(
+        "Start analysis", type="primary", key="reviews_deepdive_start"
+    ):
+        st.session_state[CLEAR_RESULTS_KEY] = False
         try:
             with st.spinner("Evaluating course reviews..."):
                 results = course_reviews_eval(selected_course_id)
@@ -229,22 +266,18 @@ if new_evaluation_record:
 elif selected_history_record:
     display_record = selected_history_record
 else:
-    display_record = next(
-        (
-            record
-            for record in st.session_state[HISTORY_KEY]
-            if courses and record["course_id"] == selected_course_id
-        ),
-        None,
-    )
     latest_session_record = st.session_state.get(LATEST_EVALUATION_KEY)
     if (
-        display_record is None
-        and latest_session_record
+        latest_session_record
         and courses
         and latest_session_record["course_id"] == selected_course_id
     ):
         display_record = latest_session_record
+    else:
+        display_record = None
+
+if st.session_state.get(CLEAR_RESULTS_KEY):
+    display_record = None
 
 if display_record:
     evaluation = display_record["evaluation"]

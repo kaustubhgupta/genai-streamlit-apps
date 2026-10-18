@@ -149,6 +149,9 @@ if HISTORY_KEY not in st.session_state:
         st.session_state["rag_evaluation_history_db_available"] = False
         st.warning(f"Could not load evaluation history from PostgreSQL: {exc}")
 
+if HISTORY_SELECTION_KEY not in st.session_state:
+    st.session_state[HISTORY_SELECTION_KEY] = None
+
 with st.sidebar:
     st.subheader("Evaluation history")
     if st.button(
@@ -156,6 +159,7 @@ with st.sidebar:
         key="reset_evaluation_config",
     ):
         st.session_state[HISTORY_SELECTION_KEY] = None
+        st.session_state["rag_evaluator_dataset"] = None
         st.session_state["rag_evaluator_reset_config"] = True
         st.session_state["rag_evaluator_hide_previous_results"] = True
         st.session_state.pop(RESULTS_KEY, None)
@@ -189,12 +193,20 @@ dataset_files = sorted(GOLDEN_DATASET_DIR.glob("*.json"))
 dataset_options = [path.name for path in dataset_files]
 if selected_history_record:
     st.session_state["rag_evaluator_dataset"] = selected_history_record["dataset"]
-elif "rag_evaluator_dataset" not in st.session_state and dataset_options:
-    st.session_state["rag_evaluator_dataset"] = dataset_options[0]
+elif "rag_evaluator_dataset" not in st.session_state:
+    st.session_state["rag_evaluator_dataset"] = None
 
 selected_dataset = st.selectbox(
-    "Golden dataset", dataset_options, key="rag_evaluator_dataset"
+    "Golden dataset",
+    dataset_options,
+    index=None,
+    placeholder="Select a golden dataset",
+    key="rag_evaluator_dataset",
 )
+if selected_dataset is None:
+    st.info("Select a golden dataset to continue.")
+    st.stop()
+
 dataset_source = selected_dataset
 
 dataset_path = GOLDEN_DATASET_DIR / selected_dataset
@@ -211,17 +223,6 @@ except ValueError as exc:
     st.stop()
 
 active_history_record = selected_history_record
-if active_history_record is None and not st.session_state.get(
-    "rag_evaluator_reset_config", False
-):
-    active_history_record = next(
-        (
-            item
-            for item in st.session_state[HISTORY_KEY]
-            if item["dataset"] == dataset_source
-        ),
-        None,
-    )
 
 config_token = (
     active_history_record["evaluation_id"] if active_history_record else None,
@@ -635,21 +636,8 @@ if selected_history_id:
     )
     if selected_record:
         saved_evaluation = selected_record["evaluation"]
-else:
-    latest_dataset_evaluation = next(
-        (
-            item
-            for item in st.session_state[HISTORY_KEY]
-            if item["dataset"] == dataset_source
-        ),
-        None,
-    )
-    if latest_dataset_evaluation and not st.session_state.get(
-        "rag_evaluator_hide_previous_results", False
-    ):
-        saved_evaluation = latest_dataset_evaluation["evaluation"]
-    elif not st.session_state.get("rag_evaluator_hide_previous_results", False):
-        saved_evaluation = st.session_state.get(RESULTS_KEY)
+elif not st.session_state.get("rag_evaluator_hide_previous_results", False):
+    saved_evaluation = st.session_state.get(RESULTS_KEY)
 
 if saved_evaluation:
     results = saved_evaluation["results"]
