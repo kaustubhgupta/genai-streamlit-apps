@@ -281,7 +281,7 @@ if st.session_state.get("rag_evaluator_config_token") != config_token:
     # the required default strategy for any new run.
     legacy_rerank_flag = retrieval_config.get("rerank_flag", True)
     st.session_state["rag_evaluator_rerank_strategy"] = retrieval_config.get(
-        "rerank_strategy", "strategy1" if legacy_rerank_flag else "strategy1"
+        "rerank_strategy", "strategy2" if legacy_rerank_flag else "strategy1"
     )
     st.session_state["rag_evaluator_keyword"] = retrieval_config.get(
         "keyword_search_flag", True
