@@ -78,7 +78,7 @@ def _parse_retrieval_context(formatted_context):
         return []
 
     chunks = re.split(
-        r"(?m)^Chunk Score [^\n]*?\(Document: [^\n]*?\): ",
+        r"(?m)^Chunk Score[^\n]*?:[ \t]*(?:\r?\n)?",
         formatted_context,
     )
     return [chunk.strip() for chunk in chunks[1:] if chunk.strip()]
@@ -91,9 +91,9 @@ def _score_metric(metric_class, threshold, model, test_case):
         include_reason=True,
         async_mode=False,
     )
-    score = metric.measure(test_case, _show_indicator=False)
+    metric.measure(test_case, _show_indicator=False)
     return {
-        "score": score,
+        "score": metric.score,
         "reason": metric.reason,
         "passed": metric.success,
     }
@@ -176,29 +176,30 @@ with st.sidebar:
         st.session_state["rag_evaluator_hide_previous_results"] = True
         st.session_state.pop(RESULTS_KEY, None)
         st.session_state.pop("rag_evaluator_config_token", None)
-    history = st.session_state[HISTORY_KEY]
-    if history:
-        history_ids = [item["evaluation_id"] for item in history]
-        selected_history_id = st.radio(
-            "Previous evaluations",
-            options=history_ids,
-            index=None,
-            key=HISTORY_SELECTION_KEY,
-            format_func=lambda evaluation_id: (
-                next(
-                    (
-                        f"{item['dataset']} — {item['created_at']:%Y-%m-%d %H:%M}"
-                        if isinstance(item["created_at"], datetime)
-                        else f"{item['dataset']} — {str(item['created_at'])[:16]}"
+    with st.container(height=300, border=False):
+        history = st.session_state[HISTORY_KEY]
+        if history:
+            history_ids = [item["evaluation_id"] for item in history]
+            selected_history_id = st.radio(
+                "Previous evaluations",
+                options=history_ids,
+                index=None,
+                key=HISTORY_SELECTION_KEY,
+                format_func=lambda evaluation_id: (
+                    next(
+                        (
+                            f"{item['dataset']} — {item['created_at']:%Y-%m-%d %H:%M}"
+                            if isinstance(item["created_at"], datetime)
+                            else f"{item['dataset']} — {str(item['created_at'])[:16]}"
+                        )
+                        for item in history
+                        if item["evaluation_id"] == evaluation_id
                     )
-                    for item in history
-                    if item["evaluation_id"] == evaluation_id
-                )
-            ),
-        )
-    else:
-        selected_history_id = None
-        st.caption("No saved evaluations yet.")
+                ),
+            )
+        else:
+            selected_history_id = None
+            st.caption("No saved evaluations yet.")
 
 selected_history_record = next(
     (
@@ -275,8 +276,12 @@ if st.session_state.get("rag_evaluator_config_token") != config_token:
     st.session_state["rag_evaluator_chunking"] = retrieval_config.get(
         "chunked_data_type", "recursive"
     )
-    st.session_state["rag_evaluator_rerank"] = retrieval_config.get(
-        "rerank_flag", False
+    # Older evaluation records stored a boolean rerank_flag rather than a strategy.
+    # Preserve their intended configuration; when reranking was disabled, select
+    # the required default strategy for any new run.
+    legacy_rerank_flag = retrieval_config.get("rerank_flag", True)
+    st.session_state["rag_evaluator_rerank_strategy"] = retrieval_config.get(
+        "rerank_strategy", "strategy1" if legacy_rerank_flag else "strategy1"
     )
     st.session_state["rag_evaluator_keyword"] = retrieval_config.get(
         "keyword_search_flag", True
@@ -352,7 +357,17 @@ with settings_left:
     chunked_data_type = st.selectbox(
         "Chunking strategy", ["recursive", "fixed"], key="rag_evaluator_chunking"
     )
-    rerank_flag = st.checkbox("Rerank retrieved chunks", key="rag_evaluator_rerank")
+    rerank_strategy = st.selectbox(
+        "Reranking method",
+        options=["strategy1", "strategy2"],
+        format_func=lambda strategy: (
+            "JEV (strategy1)"
+            if strategy == "strategy1"
+            else "Cross encoder (strategy2)"
+        ),
+        key="rag_evaluator_rerank_strategy",
+        help="Choose JEV or the cross-encoder reranker for every evaluation.",
+    )
     keyword_search_flag = st.checkbox(
         "Include keyword search", key="rag_evaluator_keyword"
     )
@@ -388,7 +403,6 @@ with settings_right:
         max_value=100,
         value=min(100, max(1, _int_env("RERANK_TOP_K", 3))),
         step=1,
-        disabled=not rerank_flag,
         key="rag_evaluator_rerank_top_k",
     )
 
@@ -472,7 +486,7 @@ if run_evaluation:
             formatted_retrieval = query_rag_documents(
                 user_input=case["input"],
                 chunked_data_type=chunked_data_type,
-                rerank_flag=rerank_flag,
+                rerank_strategy=rerank_strategy,
                 keyword_search_flag=keyword_search_flag,
                 CHUNK_SIZE_FILTER_THRESHOLD=int(chunk_size_threshold),
                 VECTOR_SEARCH_CHUNK_THRESHOLD=int(vector_search_threshold),
@@ -588,7 +602,7 @@ if run_evaluation:
         "results": results,
         "retrieval_config": {
             "chunked_data_type": chunked_data_type,
-            "rerank_flag": rerank_flag,
+            "rerank_strategy": rerank_strategy,
             "keyword_search_flag": keyword_search_flag,
             "CHUNK_SIZE_FILTER_THRESHOLD": int(chunk_size_threshold),
             "VECTOR_SEARCH_CHUNK_THRESHOLD": int(vector_search_threshold),
