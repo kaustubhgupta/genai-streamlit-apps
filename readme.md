@@ -32,7 +32,7 @@ Reusable application logic is grouped by responsibility under `utility/`:
 
 ## Usage
 
-Open the application and use the sidebar to select the tool you want to explore. For the querying and chat applications, choose a schema and at least one table before asking a question. Previous questions and conversations can be restored from the sidebar.
+Open the application and use the sidebar to select the tool you want to explore. For the querying and chat applications, choose a schema and at least one table before asking a question. You can restore previous questions and conversations from the sidebar.
 
 ### Course review ingestion
 
