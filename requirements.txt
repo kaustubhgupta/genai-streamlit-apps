@@ -17,3 +17,6 @@ tiktoken
 typesafe_sdk
 pandas 
 playwright
+fastmcp
+psycopg2-binary
+langchain

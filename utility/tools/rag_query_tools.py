@@ -35,8 +35,8 @@ def query_rag_documents(
     Args:
         user_input (str): The natural-language question or instruction to answer.
         chunked_data_type (str): can take these 2 vales -> "fixed" or "recursive"
-        rerank_strategy (str, optional): can take these 2 vales -> "strategy1" or "strategy2". 
-                        default value is: strategy1. Don't make change to this parameter unless you already tried 
+        rerank_strategy (str, optional): can take these 2 vales -> "strategy1" or "strategy2".
+                        default value is: strategy1. Don't make change to this parameter unless you already tried
                         once and didn't got the expected answer
         keyword_search_flag (bool, optional): Whether to include results from keyword-based search.
         CHUNK_SIZE_FILTER_THRESHOLD (int, optional): Minimum chunk length required for
