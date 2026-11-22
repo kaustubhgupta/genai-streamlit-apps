@@ -20,3 +20,4 @@ playwright
 fastmcp
 psycopg2-binary
 langchain
+anyio[trio]

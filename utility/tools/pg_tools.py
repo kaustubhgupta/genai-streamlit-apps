@@ -1,16 +1,20 @@
 from configparser import ConfigParser
+from pathlib import Path
 import psycopg2
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-def config(filename="database.ini", section="postgresql"):
+def config(
+    filename=Path(__file__).resolve().parents[2] / "database.ini",
+    section="postgresql",
+):
     """
     Load database configuration from database.ini.
     """
     parser = ConfigParser()
-    parser.read(filename)
+    parser.read(str(filename))
 
     db = {}
 
