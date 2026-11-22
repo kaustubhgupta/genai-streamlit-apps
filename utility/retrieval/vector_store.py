@@ -1,6 +1,10 @@
+from pathlib import Path
+
 import chromadb
 
-client = chromadb.PersistentClient()
+client = chromadb.PersistentClient(
+    path=str(Path(__file__).resolve().parents[2] / "chroma")
+)
 
 fixed_chunking_collection = client.get_or_create_collection("fixed_chunking")
 recursive_chunking_collection = client.get_or_create_collection("recursive_chunking")

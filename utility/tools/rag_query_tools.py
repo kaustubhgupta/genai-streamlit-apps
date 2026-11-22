@@ -89,8 +89,8 @@ def query_rag_documents(
         from utility.retrieval.keyword_search import keyword_search
 
         all_chunks = fetch_docs_for_keyword_search(strategy=chunked_data_type)
-        all_docs = all_chunks["documents"][0]
-        all_metadatas = all_chunks.get("metadatas", [[]])[0]
+        all_docs = all_chunks.get("documents") or []
+        all_metadatas = all_chunks.get("metadatas") or []
         keyword_document_names = {}
         for document, metadata in zip(all_docs, all_metadatas):
             keyword_document_names.setdefault(document, set()).add(
@@ -100,8 +100,10 @@ def query_rag_documents(
             )
         for document, source_names in keyword_document_names.items():
             document_names.setdefault(document, set()).update(source_names)
-        keyword_based_docs = keyword_search(
-            all_docs, user_input, KEYWORD_SEARCH_CHUNK_THRESHOLD
+        keyword_based_docs = (
+            keyword_search(all_docs, user_input, KEYWORD_SEARCH_CHUNK_THRESHOLD)
+            if all_docs
+            else []
         )
 
         keyword_based_docs_filtered = [
