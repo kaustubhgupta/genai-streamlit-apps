@@ -7,6 +7,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from utility.tools.pg_tools import direct_db_access, fetch_schema
 from utility.tools.rag_query_tools import query_rag_documents
+import os
+
+CHUNK_SIZE_FILTER_THRESHOLD = int(os.environ.get("CHUNK_SIZE_FILTER_THRESHOLD"))
+VECTOR_SEARCH_CHUNK_THRESHOLD = int(os.environ.get("VECTOR_SEARCH_CHUNK_THRESHOLD"))
+KEYWORD_SEARCH_CHUNK_THRESHOLD = int(os.environ.get("KEYWORD_SEARCH_CHUNK_THRESHOLD"))
+RERANK_TOP_K = int(os.environ.get("RERANK_TOP_K"))
 
 mcp_app = FastMCP("MCP Tools")
 
@@ -70,13 +76,13 @@ def mcp_direct_db_access(script):
 @mcp_app.tool()
 def mcp_query_bootcamp_materials(
     user_input,
-    chunked_data_type,
-    rerank_strategy,
-    keyword_search_flag,
-    CHUNK_SIZE_FILTER_THRESHOLD,
-    VECTOR_SEARCH_CHUNK_THRESHOLD,
-    KEYWORD_SEARCH_CHUNK_THRESHOLD,
-    RERANK_TOP_K,
+    chunked_data_type="recursive",
+    rerank_strategy="strategy1",
+    keyword_search_flag=True,
+    CHUNK_SIZE_FILTER_THRESHOLD=CHUNK_SIZE_FILTER_THRESHOLD,
+    VECTOR_SEARCH_CHUNK_THRESHOLD=VECTOR_SEARCH_CHUNK_THRESHOLD,
+    KEYWORD_SEARCH_CHUNK_THRESHOLD=KEYWORD_SEARCH_CHUNK_THRESHOLD,
+    RERANK_TOP_K=RERANK_TOP_K,
 ):
     """Retrieve and assemble relevant RAG chunks for a user query on everything related to bootcamp.
        The bootcamp content is stored in a vector database and this tool helps to fetch the relevant chunks from it.
@@ -124,4 +130,5 @@ def mcp_query_bootcamp_materials(
 
 
 if __name__ == "__main__":
-    mcp_app.run(transport="stdio")
+    # mcp_app.run(transport="stdio")
+    mcp_app.run(transport="http", host="127.0.0.1", port=8081)
