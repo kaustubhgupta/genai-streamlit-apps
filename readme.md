@@ -118,3 +118,24 @@ Reusable application logic is grouped by responsibility under `utility/`:
 - `ui/` — shared Streamlit history selectors and chat rendering components.
 - `ingestion/` — document ingestion and shared course-review listing/metadata queries.
 - `evaluation/` and `tools/` — evaluation workflows and tool integrations.
+
+## Env Variables Needed
+- OPENAI_API_KEY=
+- HF_TOKEN=
+- GOOGLE_API_KEY=
+- TYPESAFE_API_KEY=
+- EXCLUDED_SCHEMAS=information_schema,pg_catalog,admins,bootcamp_assistant,data_chat_assistant,data_quering_assistant,database_assistant,rag_evaluator,course_reviews_evaluation,reviews
+- MATERIALS_FOLDER=bootcamp_material
+- OPENAI_MODEL=gpt-5.6-sol
+- OPENAI_EVAL_MODEL=gpt-6-luna
+- GEMINI_MODEL_NAME=gemini-3.5-flash-lite
+- HF_MODEL=BAAI/bge-reranker-v2-m3
+- OPENAI_EMBEDDING_MODEL=text-embedding-3-large
+- OPENAI_EMBEDDING_DIM=500
+- CHUNKING_SIZE=1000
+- CHUNK_OVERLAP_SIZE=150
+- VECTOR_SEARCH_CHUNK_THRESHOLD=13
+- CHUNK_SIZE_FILTER_THRESHOLD=500
+- KEYWORD_SEARCH_CHUNK_THRESHOLD=10
+- RERANK_TOP_K=3
+- NOUL_SCORE_THRESHOLD=0.7
